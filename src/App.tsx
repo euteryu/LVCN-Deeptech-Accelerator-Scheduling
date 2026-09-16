@@ -38,6 +38,7 @@ import {
   Plus,
   Printer,
   Search,
+  Toilet,
   X,
 } from "lucide-react";
 import {
@@ -884,7 +885,7 @@ function Sidebar({
       icon: LayoutList,
     },
     { id: "location", label: "Venue Location", icon: MapPin },
-    { id: "toilets", label: "Toilet Map", icon: MapPin },
+    { id: "toilets", label: "UK Toilet Map", icon: Toilet },
     { id: "external-events", label: "External event links", icon: Link2 },
   ];
   return (
@@ -1156,7 +1157,7 @@ function ToiletMapPage() {
       <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">
         Useful on the move
       </p>
-      <h1 className="mt-1 text-3xl font-semibold">Toilet Map</h1>
+      <h1 className="mt-1 text-3xl font-semibold">UK Toilet Map</h1>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
         Find nearby public, community, and accessible toilets while travelling
         between programme events.
