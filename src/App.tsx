@@ -1359,9 +1359,7 @@ function Topbar({
             <div
               className={cn(
                 "grid size-8 place-items-center rounded-lg text-xs font-bold text-white",
-                profile.role === "lvnc_admin"
-                  ? "bg-slate-900"
-                  : "bg-indigo-600",
+                profile.role === "lvnc_admin" ? "bg-slate-900" : "bg-[#162c5b]",
               )}
             >
               {profile.fullName
