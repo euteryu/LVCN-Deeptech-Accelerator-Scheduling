@@ -2953,6 +2953,7 @@ function BusinessMeetingsPage({
   language: Language;
 }) {
   const copy = uiText[language];
+  const [adminSearch, setAdminSearch] = useState("");
   const categoryFor = (item: ScheduleItem) =>
     item.meetingCategory ??
     item.description?.match(/^Category:\s*([^\n]+)/)?.[1] ??
@@ -2975,6 +2976,39 @@ function BusinessMeetingsPage({
     if (response.decision === "pass") return "Rejected";
     return "Pending";
   };
+  const categoryStyleFor = (category: string) => {
+    const value = category.toLowerCase();
+    if (value.includes("vc") || value.includes("invest"))
+      return "bg-sky-100 text-sky-800 ring-sky-200";
+    if (value.includes("defence") || value.includes("security"))
+      return "bg-orange-100 text-orange-800 ring-orange-200";
+    if (value.includes("health") || value.includes("medical"))
+      return "bg-fuchsia-100 text-fuchsia-800 ring-fuchsia-200";
+    if (value.includes("academic") || value.includes("research"))
+      return "bg-violet-100 text-violet-800 ring-violet-200";
+    if (value.includes("corporate") || value.includes("cvc"))
+      return "bg-cyan-100 text-cyan-800 ring-cyan-200";
+    return "bg-emerald-100 text-emerald-800 ring-emerald-200";
+  };
+  const query = adminSearch.trim().toLowerCase();
+  const matchesAdminSearch = (item: ScheduleItem) => {
+    if (!query) return false;
+    return [
+      item.title,
+      item.contactName,
+      item.meetingCategory,
+      item.meetingStatus,
+      item.meetingNote,
+      item.description,
+      item.nextAction,
+      item.sourceNote,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+  };
+  const matchedCount = items.filter(matchesAdminSearch).length;
   return (
     <div>
       <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">
@@ -2988,6 +3022,32 @@ function BusinessMeetingsPage({
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
         {copy.businessIntro}
       </p>
+      {isAdmin && (
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,.03)]">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-3 size-4 text-slate-400" />
+              <Input
+                value={adminSearch}
+                onChange={(event) => setAdminSearch(event.target.value)}
+                placeholder="Find an institution, contact, email, phone or note across meetings"
+                className="pl-9"
+                aria-label="Search all business meeting records"
+              />
+            </div>
+            {query && (
+              <p className="px-1 text-xs font-semibold text-slate-500">
+                {matchedCount} matching{" "}
+                {matchedCount === 1 ? "record" : "records"} highlighted
+              </p>
+            )}
+          </div>
+          <p className="mt-2 px-1 text-[11px] text-slate-400">
+            Search results stay in the table so repeated institutions or
+            contacts across startups remain visible together.
+          </p>
+        </div>
+      )}
       <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.03)]">
         <div className="overflow-x-auto">
           <table className="min-w-[980px] w-full border-collapse text-left text-sm">
@@ -3003,48 +3063,63 @@ function BusinessMeetingsPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {items.map((item) => (
-                <tr
-                  key={item.id}
-                  tabIndex={0}
-                  onClick={() => onSelect(item.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ")
-                      onSelect(item.id);
-                  }}
-                  className="cursor-pointer odd:bg-white even:bg-slate-50/70 hover:bg-indigo-50/50 focus:bg-indigo-50/60 focus:outline-none"
-                >
-                  <td className="px-4 py-3 font-semibold text-slate-900">
-                    {item.title}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {categoryFor(item)}
-                  </td>
-                  {isAdmin && (
-                    <td className="px-4 py-3">
-                      <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold">
-                        {decisionLabel(item)}
+              {items.map((item) => {
+                const category = categoryFor(item);
+                const searchMatch = isAdmin && matchesAdminSearch(item);
+                return (
+                  <tr
+                    key={item.id}
+                    tabIndex={0}
+                    onClick={() => onSelect(item.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ")
+                        onSelect(item.id);
+                    }}
+                    className={cn(
+                      "cursor-pointer odd:bg-white even:bg-slate-50/70 hover:bg-indigo-50/50 focus:bg-indigo-50/60 focus:outline-none",
+                      searchMatch &&
+                        "bg-yellow-50 outline outline-2 outline-amber-300",
+                    )}
+                  >
+                    <td className="px-4 py-3 font-semibold text-slate-900">
+                      {item.title}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2.5 py-1 text-xs font-bold ring-1 ring-inset",
+                          categoryStyleFor(category),
+                        )}
+                      >
+                        {category}
                       </span>
                     </td>
-                  )}
-                  {isAdmin && (
-                    <td className="px-4 py-3 text-slate-600">
-                      {statusFor(item)}
+                    {isAdmin && (
+                      <td className="px-4 py-3">
+                        <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold">
+                          {decisionLabel(item)}
+                        </span>
+                      </td>
+                    )}
+                    {isAdmin && (
+                      <td className="px-4 py-3 text-slate-600">
+                        {statusFor(item)}
+                      </td>
+                    )}
+                    {isAdmin && (
+                      <td className="px-4 py-3 text-slate-500">
+                        {item.contactName ?? ""}
+                      </td>
+                    )}
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {item.startsAt ? dateLabel(item) : "Time to confirm"}
                     </td>
-                  )}
-                  {isAdmin && (
-                    <td className="px-4 py-3 text-slate-500">
-                      {item.contactName ?? ""}
+                    <td className="max-w-[360px] px-4 py-3 text-slate-600">
+                      {noteFor(item)}
                     </td>
-                  )}
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                    {item.startsAt ? dateLabel(item) : "Time to confirm"}
-                  </td>
-                  <td className="max-w-[360px] px-4 py-3 text-slate-600">
-                    {noteFor(item)}
-                  </td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
