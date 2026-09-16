@@ -660,9 +660,7 @@ export default function App({
           ) : page === "business-meetings" ? (
             <BusinessMeetingsPage
               items={visibleItems.filter(
-                (item) =>
-                  item.itemType === "business_meeting" &&
-                  Boolean(item.meetingCategory),
+                (item) => item.itemType === "business_meeting",
               )}
               isAdmin={isAdmin}
               profile={profile}
@@ -2849,6 +2847,19 @@ function BusinessMeetingsPage({
   profile: Profile;
   onSelect: (id: string) => void;
 }) {
+  const categoryFor = (item: ScheduleItem) =>
+    item.meetingCategory ??
+    item.description?.match(/^Category:\s*([^\n]+)/)?.[1] ??
+    "Business meeting";
+  const noteFor = (item: ScheduleItem) =>
+    item.meetingNote ?? item.description?.match(/\nNote:\s*(.*)$/)?.[1] ?? "";
+  const statusFor = (item: ScheduleItem) =>
+    item.meetingStatus ??
+    (item.status === "confirmed"
+      ? "Agreed"
+      : item.bookingStatus === "details_to_verify"
+        ? "Contacted"
+        : "Open");
   const decisionLabel = (item: ScheduleItem) => {
     const response = item.responses.find(
       (entry) => entry.organisationId === profile.organisationId,
@@ -2901,7 +2912,7 @@ function BusinessMeetingsPage({
                     {item.title}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
-                    {item.meetingCategory}
+                    {categoryFor(item)}
                   </td>
                   {isAdmin && (
                     <td className="px-4 py-3">
@@ -2912,7 +2923,7 @@ function BusinessMeetingsPage({
                   )}
                   {isAdmin && (
                     <td className="px-4 py-3 text-slate-600">
-                      {item.meetingStatus ?? "Open"}
+                      {statusFor(item)}
                     </td>
                   )}
                   {isAdmin && (
@@ -2924,7 +2935,7 @@ function BusinessMeetingsPage({
                     {item.startsAt ? dateLabel(item) : "Time to confirm"}
                   </td>
                   <td className="max-w-[360px] px-4 py-3 text-slate-600">
-                    {item.meetingNote ?? ""}
+                    {noteFor(item)}
                   </td>
                 </tr>
               ))}
