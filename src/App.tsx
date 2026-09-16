@@ -1,4 +1,11 @@
-import { Fragment, useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import {
   addDays,
   addMonths,
@@ -163,6 +170,8 @@ const uiText = {
 
 const pretty = (value: string) =>
   value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+const bookingLabel = (value: string) =>
+  value === "not_required" ? "Free attendance" : pretty(value);
 const dateLabel = (item: ScheduleItem) =>
   item.startsAt
     ? format(
@@ -280,6 +289,10 @@ export default function App({
   const [organisationFilter, setOrganisationFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<string>();
+  const [exportState, setExportState] = useState<
+    { kind: "excel" | "pdf"; progress: number } | undefined
+  >();
+  const exportCancelled = useRef(false);
   const [language, setLanguage] = useState<Language>(() =>
     window.localStorage.getItem("lvcn-language") === "ko" ? "ko" : "en",
   );
@@ -676,6 +689,32 @@ export default function App({
     setCreateRange({ startsAt, endsAt });
     setCreateOpen(true);
   };
+  const runExport = async (kind: "excel" | "pdf") => {
+    exportCancelled.current = false;
+    setExportState({ kind, progress: 5 });
+    try {
+      const exporters = await import("./lib/export");
+      const options = {
+        mode: scheduleMode,
+        onProgress: (progress: number) =>
+          setExportState((current) =>
+            current ? { ...current, progress } : current,
+          ),
+        isCancelled: () => exportCancelled.current,
+      } as const;
+      if (kind === "excel")
+        await exporters.exportExcel(visibleItems, organisations, options);
+      else exporters.exportPdf(visibleItems, options);
+      if (!exportCancelled.current)
+        showToast(`${kind.toUpperCase()} export downloaded`);
+    } catch (error) {
+      if (error instanceof Error && error.message === "Export cancelled")
+        showToast("Export cancelled");
+      else showToast("Export failed. Please try again.");
+    } finally {
+      setExportState(undefined);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#f7f7f4] text-slate-950">
@@ -786,12 +825,7 @@ export default function App({
                 }}
                 onCreate={() => openCreateAt()}
                 onImport={() => setImportOpen(true)}
-                onExport={async (kind: "excel" | "pdf") => {
-                  const exporters = await import("./lib/export");
-                  if (kind === "excel")
-                    await exporters.exportExcel(visibleItems, organisations);
-                  else exporters.exportPdf(visibleItems);
-                }}
+                onExport={(kind: "excel" | "pdf") => void runExport(kind)}
               />
               {isAdmin && (
                 <Filters
@@ -916,6 +950,29 @@ export default function App({
         <div className="fixed bottom-5 left-1/2 z-[80] flex -translate-x-1/2 items-center gap-2 rounded-full bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-xl">
           <Check className="size-4 text-emerald-400" />
           {toast}
+        </div>
+      )}
+      {exportState && (
+        <div className="fixed bottom-5 right-5 z-[80] w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
+          <div className="flex items-center justify-between gap-3 text-sm font-semibold text-slate-800">
+            <span>Preparing {exportState.kind.toUpperCase()}…</span>
+            <span>{exportState.progress}%</span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-[#162c5b] transition-all"
+              style={{ width: `${exportState.progress}%` }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              exportCancelled.current = true;
+            }}
+            className="mt-3 text-xs font-semibold text-slate-500 underline hover:text-slate-900"
+          >
+            Cancel export
+          </button>
         </div>
       )}
     </div>
@@ -2012,7 +2069,7 @@ function LegacySpreadsheetBoard({
                     )}
                   </td>
                   <td className="px-4 py-3 align-top text-xs font-medium text-slate-600">
-                    {pretty(item.bookingStatus)}
+                    {bookingLabel(item.bookingStatus)}
                   </td>
                 </tr>
               );
@@ -2132,7 +2189,7 @@ function SpreadsheetBoard({
               const notes = [
                 item.costNote,
                 item.nextAction,
-                pretty(item.bookingStatus),
+                bookingLabel(item.bookingStatus),
                 conflict && "Availability conflict",
               ]
                 .filter(Boolean)
@@ -3056,7 +3113,7 @@ function BusinessMeetingsPage({
                 <th className="px-4 py-2.5">Institution</th>
                 <th className="px-4 py-2.5">Category</th>
                 {isAdmin && <th className="px-4 py-2.5">SVC decision</th>}
-                {isAdmin && <th className="px-4 py-2.5">Status</th>}
+                <th className="px-4 py-2.5">Status</th>
                 {isAdmin && <th className="px-4 py-2.5">Person</th>}
                 <th className="px-4 py-2.5">Time</th>
                 <th className="px-4 py-2.5">Note</th>
@@ -3101,11 +3158,20 @@ function BusinessMeetingsPage({
                         </span>
                       </td>
                     )}
-                    {isAdmin && (
-                      <td className="px-4 py-3 text-slate-600">
+                    <td className="px-4 py-3">
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2.5 py-1 text-xs font-bold ring-1 ring-inset",
+                          statusFor(item) === "Agreed"
+                            ? "bg-emerald-100 text-emerald-800 ring-emerald-200"
+                            : statusFor(item) === "Contacted"
+                              ? "bg-amber-100 text-amber-800 ring-amber-200"
+                              : "bg-slate-100 text-slate-700 ring-slate-200",
+                        )}
+                      >
                         {statusFor(item)}
-                      </td>
-                    )}
+                      </span>
+                    </td>
                     {isAdmin && (
                       <td className="px-4 py-3 text-slate-500">
                         {item.contactName ?? ""}
