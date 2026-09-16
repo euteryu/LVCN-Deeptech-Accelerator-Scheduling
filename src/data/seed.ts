@@ -14,6 +14,11 @@ export const organisations: Organisation[] = [
     slug: "deep-fusion-ai",
   },
   {
+    id: "99999999-9999-4999-8999-999999999990",
+    name: "PEN Ventures",
+    slug: "pen-ventures",
+  },
+  {
     id: "99999999-9999-4999-8999-999999999992",
     name: "Dotter",
     slug: "dotter",
