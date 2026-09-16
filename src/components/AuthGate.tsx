@@ -128,7 +128,7 @@ export function AuthGate({
         </div>
       </div>
       <h1 className="mt-8 text-3xl font-semibold tracking-tight">
-        Your cohort schedule, clearly reconciled.
+        Deeptech Accelerator Schedule
       </h1>
       <p className="mt-3 text-sm leading-6 text-slate-500">
         Enter the email address LVCN has registered for you.

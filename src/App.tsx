@@ -1967,11 +1967,8 @@ function SpreadsheetBoard({
         <table className="min-w-[1160px] w-full border-collapse text-left text-sm">
           <thead className="bg-[#286c58] text-[11px] font-bold text-white">
             <tr>
-              <th className="w-10 border-b border-emerald-900/30 px-2 py-2 text-center">
-                Tt
-              </th>
               <th className="min-w-[320px] border-b border-emerald-900/30 px-4 py-2">
-                Event / meeting
+                Event / Meeting
               </th>
               <th className="w-20 border-b border-emerald-900/30 px-3 py-2">
                 Start
@@ -2054,7 +2051,7 @@ function SpreadsheetBoard({
                           "relative outline outline-2 outline-indigo-500 outline-offset-[-2px]",
                       )}
                     >
-                      <td colSpan={8} className="px-3 py-1.5">
+                      <td colSpan={7} className="px-3 py-1.5">
                         {item.startsAt
                           ? format(new Date(item.startsAt), "EEEE, d MMMM yyyy")
                           : "Date to confirm"}
@@ -2070,7 +2067,7 @@ function SpreadsheetBoard({
                     }}
                     className="cursor-pointer odd:bg-white even:bg-slate-50/70 hover:bg-indigo-50/50 focus:bg-indigo-50/60 focus:outline-none"
                   >
-                    <td className="px-2 py-2 text-center text-xs text-slate-400">
+                    <td className="hidden">
                       {item.timePrecision === "all_day" ? "●" : ""}
                     </td>
                     <td className="px-4 py-2 align-top font-semibold text-slate-900">
