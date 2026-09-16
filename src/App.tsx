@@ -659,7 +659,9 @@ export default function App({
           ) : page === "business-meetings" ? (
             <BusinessMeetingsPage
               items={visibleItems.filter(
-                (item) => item.itemType === "business_meeting",
+                (item) =>
+                  item.itemType === "business_meeting" &&
+                  Boolean(item.meetingCategory),
               )}
               isAdmin={isAdmin}
               profile={profile}
@@ -2850,10 +2852,10 @@ function BusinessMeetingsPage({
     const response = item.responses.find(
       (entry) => entry.organisationId === profile.organisationId,
     );
-    if (response?.decision === "going" || item.bookingStatus === "verified")
-      return "Agreed";
-    if (item.bookingStatus === "details_to_verify") return "Pending";
-    return "Contacted";
+    if (!response) return "";
+    if (response.decision === "going") return "Agreed";
+    if (response.decision === "pass") return "Rejected";
+    return "Pending";
   };
   return (
     <div>
@@ -2897,7 +2899,9 @@ function BusinessMeetingsPage({
                   <td className="px-4 py-3 font-semibold text-slate-900">
                     {item.title}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">Business meeting</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {item.meetingCategory}
+                  </td>
                   {isAdmin && (
                     <td className="px-4 py-3">
                       <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold">
@@ -2907,19 +2911,19 @@ function BusinessMeetingsPage({
                   )}
                   {isAdmin && (
                     <td className="px-4 py-3 text-slate-600">
-                      {pretty(item.status)}
+                      {item.meetingStatus ?? "Open"}
                     </td>
                   )}
                   {isAdmin && (
                     <td className="px-4 py-3 text-slate-500">
-                      LVCN-managed contact
+                      {item.contactName ?? ""}
                     </td>
                   )}
                   <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                    {dateLabel(item)}
+                    {item.startsAt ? dateLabel(item) : "Time to confirm"}
                   </td>
                   <td className="max-w-[360px] px-4 py-3 text-slate-600">
-                    {item.nextAction || item.description || "Details to follow"}
+                    {item.meetingNote ?? ""}
                   </td>
                 </tr>
               ))}

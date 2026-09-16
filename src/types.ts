@@ -75,6 +75,10 @@ export interface ScheduleItem {
   nextAction?: string;
   sourceNote?: string;
   conflictGroupId?: string;
+  meetingCategory?: string;
+  meetingStatus?: string;
+  contactName?: string;
+  meetingNote?: string;
   responses: Response[];
 }
 export interface AvailabilityBlock {
