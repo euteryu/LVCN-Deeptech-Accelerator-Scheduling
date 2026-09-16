@@ -30,6 +30,7 @@ import {
   LayoutList,
   Maximize2,
   Link2,
+  Languages,
   LockKeyhole,
   LogOut,
   MapPin,
@@ -95,6 +96,70 @@ const itemMeta: Record<
     accent: "text-slate-700",
   },
 };
+
+type Language = "en" | "ko";
+const uiText = {
+  en: {
+    schedule: "Schedule",
+    businessMeetings: "Business meetings",
+    cohortDecisions: "Cohort decisions",
+    myDecisions: "My decisions",
+    venueLocation: "Venue Location",
+    toiletMap: "UK Toilet Map",
+    externalLinks: "External event links",
+    addCompanyWork: "Add company work",
+    organisers: "Organisers",
+    investorShowcase: "Investor Showcase",
+    collapse: "Collapse panel",
+    expand: "Expand panel",
+    language: "한국어",
+    programmeSchedule: "Programme schedule",
+    calendar: "Calendar",
+    spreadsheet: "Spreadsheet",
+    undo: "Undo",
+    redo: "Redo",
+    searchSchedule: "Search schedule",
+    createItem: "Create item",
+    proposeEvent: "Propose event",
+    export: "Export",
+    jumpToday: "Jump To Today",
+    key: "Key",
+    confirmed: "Confirmed",
+    decisionPending: "Decision pending",
+    businessIntro:
+      "Potential meetings and introductions available during the programme. LVCN sees the full coordination view; participating companies see only the details needed to decide whether an opportunity is relevant.",
+  },
+  ko: {
+    schedule: "일정",
+    businessMeetings: "비즈니스 미팅",
+    cohortDecisions: "코호트 결정",
+    myDecisions: "나의 결정",
+    venueLocation: "행사 장소",
+    toiletMap: "영국 화장실 지도",
+    externalLinks: "외부 행사 링크",
+    addCompanyWork: "회사 업무 추가",
+    organisers: "주최자",
+    investorShowcase: "투자자 쇼케이스",
+    collapse: "패널 접기",
+    expand: "패널 펼치기",
+    language: "English",
+    programmeSchedule: "프로그램 일정",
+    calendar: "캘린더",
+    spreadsheet: "스프레드시트",
+    undo: "실행 취소",
+    redo: "다시 실행",
+    searchSchedule: "일정 검색",
+    createItem: "항목 만들기",
+    proposeEvent: "행사 제안",
+    export: "내보내기",
+    jumpToday: "오늘로 이동",
+    key: "범례",
+    confirmed: "확정",
+    decisionPending: "결정 대기",
+    businessIntro:
+      "프로그램 기간 중 가능한 미팅 및 소개입니다. LVCN은 전체 조정 정보를 보고, 참가 회사에는 관련 여부를 결정하는 데 필요한 정보만 표시됩니다.",
+  },
+} as const;
 
 const pretty = (value: string) =>
   value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -215,7 +280,14 @@ export default function App({
   const [organisationFilter, setOrganisationFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<string>();
+  const [language, setLanguage] = useState<Language>(() =>
+    window.localStorage.getItem("lvcn-language") === "ko" ? "ko" : "en",
+  );
   const isAdmin = profile.role === "lvnc_admin";
+  useEffect(() => {
+    window.localStorage.setItem("lvcn-language", language);
+    document.documentElement.lang = language;
+  }, [language]);
 
   useEffect(() => {
     const client = supabase;
@@ -616,6 +688,8 @@ export default function App({
         onClose={() => setMobileMenu(false)}
         onNavigate={setPage}
         onBusy={() => setBusyOpen(true)}
+        language={language}
+        setLanguage={setLanguage}
       />
       <div className={cn(sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-[232px]")}>
         <Topbar
@@ -647,6 +721,7 @@ export default function App({
             }
           }}
           onMenu={() => setMobileMenu(true)}
+          language={language}
         />
         <main className="mx-auto max-w-[1600px] px-4 pb-12 pt-5 sm:px-6 lg:px-8">
           {page === "organisers" ? (
@@ -665,11 +740,13 @@ export default function App({
               isAdmin={isAdmin}
               profile={profile}
               onSelect={setSelectedId}
+              language={language}
             />
           ) : page === "calendar" ? (
             <>
               <CalendarHeader
                 scheduleMode={scheduleMode}
+                language={language}
                 week={week}
                 view={view}
                 setView={changeCalendarView}
@@ -847,6 +924,8 @@ export default function App({
 
 function Sidebar({
   profile,
+  language,
+  setLanguage,
   page,
   mobileOpen,
   collapsed,
@@ -856,6 +935,8 @@ function Sidebar({
   onBusy,
 }: {
   profile: Profile;
+  language: Language;
+  setLanguage: (language: Language) => void;
   page: string;
   mobileOpen: boolean;
   collapsed: boolean;
@@ -873,18 +954,19 @@ function Sidebar({
   ) => void;
   onBusy: () => void;
 }) {
+  const copy = uiText[language];
   const nav = [
-    { id: "calendar", label: "Schedule", icon: CalendarDays },
-    { id: "business-meetings", label: "Business meetings", icon: Building2 },
+    { id: "calendar", label: copy.schedule, icon: CalendarDays },
+    { id: "business-meetings", label: copy.businessMeetings, icon: Building2 },
     {
       id: "decisions",
       label:
-        profile.role === "lvnc_admin" ? "Cohort decisions" : "My decisions",
+        profile.role === "lvnc_admin" ? copy.cohortDecisions : copy.myDecisions,
       icon: LayoutList,
     },
-    { id: "location", label: "Venue Location", icon: MapPin },
-    { id: "toilets", label: "UK Toilet Map", icon: Toilet },
-    { id: "external-events", label: "External event links", icon: Link2 },
+    { id: "location", label: copy.venueLocation, icon: MapPin },
+    { id: "toilets", label: copy.toiletMap, icon: Toilet },
+    { id: "external-events", label: copy.externalLinks, icon: Link2 },
   ];
   return (
     <Fragment>
@@ -937,8 +1019,8 @@ function Sidebar({
             collapsed && "lg:justify-center lg:px-2",
           )}
           onClick={onToggle}
-          aria-label={collapsed ? "Expand panel" : "Collapse panel"}
-          title={collapsed ? "Expand panel" : "Collapse panel"}
+          aria-label={collapsed ? copy.expand : copy.collapse}
+          title={collapsed ? copy.expand : copy.collapse}
         >
           {collapsed ? (
             <ChevronsRight className="size-[18px]" />
@@ -946,7 +1028,7 @@ function Sidebar({
             <ChevronsLeft className="size-[18px]" />
           )}
           <span className={cn(collapsed && "lg:hidden")}>
-            {collapsed ? "Expand panel" : "Collapse panel"}
+            {collapsed ? copy.expand : copy.collapse}
           </span>
         </button>
         <nav className="space-y-1">
@@ -985,7 +1067,7 @@ function Sidebar({
                 onBusy();
                 onClose();
               }}
-              title={collapsed ? "Add company work" : undefined}
+              title={collapsed ? copy.addCompanyWork : undefined}
               className={cn(
                 "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-950",
                 collapsed && "lg:justify-center lg:px-2",
@@ -993,7 +1075,7 @@ function Sidebar({
             >
               <Plus className="size-[18px] shrink-0" />
               <span className={cn(collapsed && "lg:hidden")}>
-                Add company work
+                {copy.addCompanyWork}
               </span>
             </button>
           )}
@@ -1003,7 +1085,7 @@ function Sidebar({
             onNavigate("organisers");
             onClose();
           }}
-          title={collapsed ? "Organisers" : undefined}
+          title={collapsed ? copy.organisers : undefined}
           className={cn(
             "mt-auto flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold",
             collapsed && "lg:justify-center lg:px-2",
@@ -1013,13 +1095,15 @@ function Sidebar({
           )}
         >
           <Link2 className="size-[18px] shrink-0" />
-          <span className={cn(collapsed && "lg:hidden")}>Organisers</span>
+          <span className={cn(collapsed && "lg:hidden")}>
+            {copy.organisers}
+          </span>
         </button>
         <a
           href="https://luma.com/koreavc"
           target="_blank"
           rel="noreferrer"
-          title={collapsed ? "Investor Showcase" : undefined}
+          title={collapsed ? copy.investorShowcase : undefined}
           className={cn(
             "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100",
             collapsed && "lg:justify-center lg:px-2",
@@ -1027,9 +1111,24 @@ function Sidebar({
         >
           <ExternalLink className="size-[18px] shrink-0" />
           <span className={cn(collapsed && "lg:hidden")}>
-            Investor Showcase
+            {copy.investorShowcase}
           </span>
         </a>
+        <button
+          type="button"
+          onClick={() => setLanguage(language === "en" ? "ko" : "en")}
+          title={collapsed ? copy.language : undefined}
+          aria-label={`Switch language to ${copy.language}`}
+          className={cn(
+            "mt-2 flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+            collapsed && "lg:justify-center lg:px-2",
+          )}
+        >
+          <Languages className="size-[18px] shrink-0" />
+          <span className={cn(collapsed && "lg:hidden")}>
+            {language === "en" ? "한국어" : "English"}
+          </span>
+        </button>
       </aside>
     </Fragment>
   );
@@ -1264,6 +1363,7 @@ function ExternalEventsPage() {
 
 function Topbar({
   profile,
+  language,
   demoMode,
   items,
   availability,
@@ -1279,6 +1379,7 @@ function Topbar({
   onMenu,
 }: {
   profile: Profile;
+  language: Language;
   demoMode: boolean;
   items: ScheduleItem[];
   availability: AvailabilityBlock[];
@@ -1294,6 +1395,7 @@ function Topbar({
   onMenu: () => void;
 }) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const copy = uiText[language];
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200/90 bg-[#f7f7f4]/90 px-4 backdrop-blur sm:px-6 lg:px-8">
       <button
@@ -1308,7 +1410,7 @@ function Topbar({
             <Pulse items={items} availability={availability} />
           ) : (
             <p className="text-xs font-medium text-slate-500">
-              Programme schedule
+              {copy.programmeSchedule}
             </p>
           )}
           {page === "calendar" && (
@@ -1316,6 +1418,7 @@ function Topbar({
               <ScheduleModeToggle
                 mode={scheduleMode}
                 setMode={setScheduleMode}
+                language={language}
               />
               <div className="flex items-center gap-1.5 border-l border-slate-200 pl-3">
                 <button
@@ -1324,7 +1427,7 @@ function Topbar({
                   disabled={!canUndo}
                   className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35"
                 >
-                  Undo
+                  {copy.undo}
                 </button>
                 <button
                   type="button"
@@ -1332,7 +1435,7 @@ function Topbar({
                   disabled={!canRedo}
                   className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35"
                 >
-                  Redo
+                  {copy.redo}
                 </button>
               </div>
             </div>
@@ -1430,16 +1533,19 @@ function Topbar({
 function ScheduleModeToggle({
   mode,
   setMode,
+  language,
 }: {
   mode: "calendar" | "spreadsheet";
   setMode: (mode: "calendar" | "spreadsheet") => void;
+  language: Language;
 }) {
+  const copy = uiText[language];
   return (
     <div className="flex items-center rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
       {(
         [
-          ["calendar", "Calendar"],
-          ["spreadsheet", "Spreadsheet"],
+          ["calendar", copy.calendar],
+          ["spreadsheet", copy.spreadsheet],
         ] as const
       ).map(([value, label]) => (
         <button
@@ -1532,6 +1638,7 @@ function Pulse({
 
 function CalendarHeader({
   scheduleMode,
+  language,
   week,
   view,
   setView,
@@ -1547,6 +1654,7 @@ function CalendarHeader({
   onExport,
 }: any) {
   const [exportOpen, setExportOpen] = useState(false);
+  const copy = uiText[language as Language];
   return (
     <div className="mb-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -1554,7 +1662,7 @@ function CalendarHeader({
           <h1 className="text-2xl font-semibold tracking-[-.025em] sm:text-3xl">
             {scheduleMode === "calendar"
               ? format(week, "MMMM yyyy")
-              : "Schedule spreadsheet"}
+              : copy.spreadsheet}
           </h1>
           {scheduleMode === "calendar" && (
             <p className="mt-1 text-sm text-slate-500">
@@ -1573,13 +1681,13 @@ function CalendarHeader({
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search schedule"
+            placeholder={copy.searchSchedule}
             className="pl-9"
           />
         </div>
         <Button variant="indigo" onClick={onCreate}>
           <Plus className="size-4" />
-          {isAdmin ? "Create item" : "Propose event"}
+          {isAdmin ? copy.createItem : copy.proposeEvent}
         </Button>
         {scheduleMode === "calendar" && (
           <Button
@@ -1587,7 +1695,7 @@ function CalendarHeader({
             onClick={() => void document.documentElement.requestFullscreen?.()}
           >
             <Maximize2 className="size-4" />
-            Focus Calendar Mode
+            {language === "ko" ? "캘린더 집중 모드" : "Focus Calendar Mode"}
           </Button>
         )}
         <div className="relative">
@@ -1597,7 +1705,7 @@ function CalendarHeader({
             aria-expanded={exportOpen}
           >
             <Download className="size-4" />
-            Export
+            {copy.export}
             <ChevronDown className="size-3.5" />
           </Button>
           {exportOpen && (
@@ -1610,7 +1718,7 @@ function CalendarHeader({
                 className="flex w-full gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"
               >
                 <FileDown className="size-4" />
-                Excel workbook
+                {language === "ko" ? "Excel 파일" : "Excel workbook"}
               </button>
               <button
                 onClick={() => {
@@ -1620,7 +1728,7 @@ function CalendarHeader({
                 className="flex w-full gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"
               >
                 <Printer className="size-4" />
-                Print-ready PDF
+                {language === "ko" ? "인쇄용 PDF" : "Print-ready PDF"}
               </button>
             </div>
           )}
@@ -1631,7 +1739,7 @@ function CalendarHeader({
         <div className="flex flex-wrap items-center gap-2">
           {scheduleMode === "calendar" && (
             <Button variant="secondary" onClick={onToday}>
-              Jump To Today
+              {copy.jumpToday}
             </Button>
           )}
           {scheduleMode === "calendar" && (
@@ -2836,12 +2944,15 @@ function BusinessMeetingsPage({
   isAdmin,
   profile,
   onSelect,
+  language,
 }: {
   items: ScheduleItem[];
   isAdmin: boolean;
   profile: Profile;
   onSelect: (id: string) => void;
+  language: Language;
 }) {
+  const copy = uiText[language];
   const categoryFor = (item: ScheduleItem) =>
     item.meetingCategory ??
     item.description?.match(/^Category:\s*([^\n]+)/)?.[1] ??
@@ -2867,15 +2978,15 @@ function BusinessMeetingsPage({
   return (
     <div>
       <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">
-        Schedule / Business meetings
+        {language === "ko"
+          ? "일정 / 비즈니스 미팅"
+          : "Schedule / Business meetings"}
       </p>
       <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-        Business meetings
+        {copy.businessMeetings}
       </h1>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-        Potential meetings and introductions available during the programme.
-        LVCN sees the full coordination view; participating companies see only
-        the details needed to decide whether an opportunity is relevant.
+        {copy.businessIntro}
       </p>
       <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.03)]">
         <div className="overflow-x-auto">
