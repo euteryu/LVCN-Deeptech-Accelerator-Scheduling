@@ -240,8 +240,11 @@ const meetingCategoryFor = (item: ScheduleItem) =>
   item.meetingCategory ??
   item.description?.match(/^Category:\s*([^\n]+)/)?.[1] ??
   "Business meeting";
+const genericBusinessMeetingTitle = /^busines{1,2}\s+meetings?\b/i;
 const isGenericBusinessMeetingSlot = (item: ScheduleItem) =>
-  /^busines{1,2}\s+meetings?\b/i.test(item.title.trim());
+  genericBusinessMeetingTitle.test(item.title.trim());
+const normaliseGenericBusinessMeetingTitle = (title: string) =>
+  title.replace(genericBusinessMeetingTitle, "Business Meetings");
 const isConferenceOrEvent = (item: ScheduleItem) =>
   /\b(conference|summit|forum|expo|exhibition|event|workshop|hackathon|networking)\b/i.test(
     item.title,
@@ -392,7 +395,7 @@ export default function App({
       setItems(
         (scheduleRows ?? []).map((row: any) => ({
           id: row.id,
-          title: row.title,
+          title: normaliseGenericBusinessMeetingTitle(row.title),
           description: row.description ?? undefined,
           itemType: row.item_type,
           visibilityScope: row.visibility_scope,
