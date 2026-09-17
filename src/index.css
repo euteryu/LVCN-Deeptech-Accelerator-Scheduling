@@ -17,6 +17,36 @@ button:focus-visible, a:focus-visible { outline: 2px solid #6366f1; outline-offs
 }
 .note-flash { animation: note-flash 1.6s ease-out 1; }
 
+/* Deliberately slow, high-contrast alert for decisions and schedule clashes.
+   The two bright states in each cycle make the required action unmistakable
+   without creating a rapid strobe. */
+@keyframes urgent-attention {
+  0%, 31%, 58%, 100% {
+    background-color: #fef3c7;
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 2px rgb(245 158 11 / 0.5), 0 0 12px 2px rgb(245 158 11 / 0.35);
+    transform: scale(1);
+  }
+  39%, 47%, 72%, 80% {
+    background-color: #fef08a;
+    border-color: #eab308;
+    box-shadow: 0 0 0 4px rgb(250 204 21 / 0.9), 0 0 32px 9px rgb(250 204 21 / 0.9);
+    transform: scale(1.025);
+  }
+}
+.urgent-attention {
+  animation: urgent-attention 2.8s ease-in-out infinite;
+  color: #713f12 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .urgent-attention {
+    animation: none;
+    background-color: #fef08a;
+    border-color: #eab308;
+    box-shadow: 0 0 0 4px rgb(250 204 21 / 0.8), 0 0 24px 6px rgb(250 204 21 / 0.75);
+  }
+}
+
 @media print {
   aside, header, button, .group { display: none !important; }
   main { padding: 0 !important; }

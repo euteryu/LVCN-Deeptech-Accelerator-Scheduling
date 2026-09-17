@@ -1,6 +1,6 @@
 # LVCN Programme Board — project handover
 
-Last updated: 2026-09-16
+Last updated: 2026-09-17
 
 ## Current state
 
@@ -11,7 +11,9 @@ Last updated: 2026-09-16
 - Authentication now uses lightweight allow-listed email entry: no magic-link email is sent. Anonymous Sign-ins are enabled in Supabase Auth, and `202609160003` through `202609160005` are applied to support it.
 - Calendar UI has day/week/month views, view-aware previous/next navigation, a compact colour key, focus mode, and Excel/PDF export.
 - The desktop sidebar starts collapsed as a 72px icon rail, so the calendar gets maximum width. The dedicated Menu button above Calendar expands it to show labels; the same control collapses it again.
-- Last verified: production build passed after the latest sidebar and calendar refinements.
+- Admins open directly into the spreadsheet schedule mode. Potential Biz Meets has expanded, collapsible (open by default) admin guidance; Hammersmith hotel recommendations include Hilton London Olympia and K West Hotel & Spa.
+- Pending decisions and time/conflict warnings use a deliberately slow, high-contrast yellow on/off alert to make required action clear, with a non-animated high-contrast fallback for reduced-motion users.
+- Last verified: lint and production build passed after the latest schedule and coordination refinements.
 
 ## Run locally
 
@@ -54,14 +56,24 @@ Both Aadam addresses are included as admin allow-list entries. If only one shoul
 
 ## Next session checklist
 
-1. Start the local app with `npm run dev`.
-2. Run the migration and seed SQL in Supabase if not already done.
-3. Run `supabase/contacts_invites.sql`.
-4. Test direct email entry as one admin and one startup member in separate private browser windows.
-5. Verify an admin can see the cohort and a startup member can see only its own organisation's private responses/availability.
-6. Review the UI on desktop and mobile, then deploy to Cloudflare Pages when ready.
-7. Before public launch, rotate/reissue any exposed credentials, review Supabase Auth redirect URLs, confirm RLS with two real startup accounts, and tighten production secrets/roles.
-8. Keep the sidebar collapsed by default unless LVCN decides labels should be visible initially; it is deliberately a narrow icon rail on desktop to prioritise calendar space.
+1. Tackle maintenance/modularity refactoring next: split the large `App.tsx` into maintainable modules while preserving existing behaviour and database compatibility.
+2. Iron out the remaining URI/routing and UX details.
+3. Run the full lint/build checks before any deployment.
+4. Keep all changes local until explicit approval to go live.
+
+## Priority rollout work after the refactor
+
+1. Complete a data-audit worksheet for every remaining startup: name, owner, contact, opportunities, meetings, dates/times, location, source link, status, and which organisations may see it. Deep Fusion AI and First Lab can be treated as the completed baseline, then load and verify the remaining startups one at a time.
+2. Add the outstanding institutions, named contacts, and meeting opportunities only after an LVCN owner confirms the source and audience. Use the existing Potential Biz Meets workflow rather than inventing a second record type.
+3. Add an admin-only completeness view: per startup, show missing schedule/meeting information and items still awaiting a decision. This is more useful than trying to infer completeness from the calendar itself.
+4. Before deployment, test the operational paths with realistic data: one admin coordinating several startups, an individual startup updating a decision, overlap/conflict warnings, mobile/tablet use, and links opened directly or shared.
+
+## Performance and reliability guardrails
+
+- This is a small, known cohort, so correctness, clear permissions, and simple queries matter more than premature infrastructure scaling. Keep the current data model and add pagination/server-side filtering only when the real data volume demonstrates a need.
+- The production build currently warns about a large main JavaScript bundle. During the modularity refactor, lazy-load the PDF/Excel export code and any non-default admin-only views; that gives the clearest first-load improvement without changing user-facing behaviour.
+- Keep Supabase queries scoped to the signed-in user's organisation where applicable, preserve the existing RLS checks, and avoid polling. Add targeted indexes only after inspecting a real slow query.
+- Keep `App.tsx` as orchestration only. Move views, data mapping, decision/conflict logic, and export UI into focused modules with tests around the mapping and permissions-sensitive logic.
 
 ## Do not do
 

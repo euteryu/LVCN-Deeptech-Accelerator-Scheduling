@@ -491,7 +491,9 @@ export default function App({
   );
   const [scheduleMode, setScheduleMode] = useState<"calendar" | "spreadsheet">(
     () =>
-      initialProfile?.role === "startup_member" ? "spreadsheet" : "calendar",
+      initialProfile?.role === "lvnc_admin" || initialProfile?.role === "startup_member"
+        ? "spreadsheet"
+        : "calendar",
   );
   const [mobileMenu, setMobileMenu] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
@@ -1952,6 +1954,8 @@ const hotelRecommendations: Record<
       { name: "Novotel London West", address: "1 Shortlands, London W6 8DR", typicalNightlyRate: "~£180", note: "Large business hotel, a short walk from the programme base.", bookingUrl: "https://all.accor.com/hotel/0737/index.en.shtml" },
       { name: "Holiday Inn Express London – Hammersmith", address: "124 King Street, London W6 0QU", typicalNightlyRate: "~£150", note: "Straightforward breakfast-included stay near the Tube.", bookingUrl: "https://www.ihg.com/holidayinnexpress/hotels/gb/en/london/lonhm/hoteldetail" },
       { name: "St Paul's Hotel", address: "153 Hammersmith Road, London W14 0QL", typicalNightlyRate: "~£190", note: "Boutique option near Olympia and Brook Green.", bookingUrl: "https://www.stpaulshotel.co.uk/" },
+      { name: "Hilton London Olympia", address: "380 Kensington High Street, London W14 8NL", typicalNightlyRate: "~£170", note: "Convenient for Olympia events and a short Tube ride to Hammersmith.", bookingUrl: "https://www.hilton.com/en/hotels/lonolhi-hilton-london-olympia/" },
+      { name: "K West Hotel & Spa", address: "Richmond Way, London W14 0AX", typicalNightlyRate: "~£200", note: "Comfortable West London option near Shepherd’s Bush and the Central line.", bookingUrl: "https://www.k-west.co.uk/" },
     ],
   },
   Cambridge: {
@@ -2681,7 +2685,11 @@ function Filters({
         <option value="all">All statuses</option>
         {["draft", "proposed", "confirmed", "cancelled"].map((value) => (
           <option key={value} value={value}>
-            {pretty(value)}
+            {value === "draft"
+              ? "Draft (internal)"
+              : value === "proposed"
+                ? "Proposed (awaiting publish)"
+                : pretty(value)}
           </option>
         ))}
       </Select>
@@ -2883,8 +2891,22 @@ function SpreadsheetBoard({
   };
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.03)]">
+      {!isAdmin && profile.organisationId && (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <ol className="list-decimal space-y-1 pl-5 font-semibold marker:font-black">
+            <li>
+              Resolve every glowing yellow item first. Open it and record your
+              decision so LVCN can coordinate the schedule.
+            </li>
+            <li>
+              Select any row to see the complete event details and full
+              location.
+            </li>
+          </ol>
+        </div>
+      )}
       <div className="overflow-x-auto">
-        <table className="min-w-[1160px] w-full border-collapse text-left text-sm">
+        <table className="min-w-[910px] w-full border-collapse text-left text-sm">
           <thead className="bg-[#286c58] text-[11px] font-bold text-white">
             <tr>
               <th className="min-w-[320px] border-b border-emerald-900/30 px-4 py-2">
@@ -2904,9 +2926,6 @@ function SpreadsheetBoard({
               </th>
               <th className="min-w-[260px] border-b border-emerald-900/30 px-3 py-2">
                 Price (if applicable)
-              </th>
-              <th className="min-w-[250px] border-b border-emerald-900/30 px-3 py-2">
-                Location
               </th>
             </tr>
           </thead>
@@ -2941,6 +2960,14 @@ function SpreadsheetBoard({
                 },
                 { pending: 0, confirmed: 0, rejected: 0 },
               );
+              const adminDecision =
+                adminDecisionSummary.pending > 0
+                  ? "pending"
+                  : adminDecisionSummary.confirmed > 0
+                    ? "confirmed"
+                    : item.responses.length > 0
+                      ? "rejected"
+                      : "pending";
               const isPendingDecision =
                 !decision ||
                 ["undecided", "interested", "acknowledged"].includes(decision);
@@ -3017,7 +3044,7 @@ function SpreadsheetBoard({
                           "relative outline outline-2 outline-indigo-500 outline-offset-[-2px]",
                       )}
                     >
-                      <td colSpan={7} className="px-3 py-1.5">
+                      <td colSpan={6} className="px-3 py-1.5">
                         {itemDate
                           ? format(itemDate, "EEEE, d MMMM yyyy")
                           : "Date to confirm"}
@@ -3045,7 +3072,7 @@ function SpreadsheetBoard({
                       <span className="flex items-center gap-2">
                         {item.title}
                         {conflict && (
-                          <span className="inline-flex animate-pulse items-center gap-1 rounded-md bg-rose-100 px-2 py-1 text-[10px] font-bold text-rose-900 shadow-[0_0_0_3px_rgba(251,113,133,.24),0_0_24px_rgba(244,63,94,.62)] ring-2 ring-rose-300 ring-offset-1">
+                          <span className="urgent-attention inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold ring-2 ring-amber-300 ring-offset-1">
                             <AlertTriangle className="size-3" />
                             Clash
                           </span>
@@ -3053,7 +3080,7 @@ function SpreadsheetBoard({
                         {!conflict && hasScheduleOverlap && (
                           <span
                             title="Times overlap. This may still be manageable; review both events and choose the appropriate decisions."
-                            className="inline-flex animate-pulse items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-900 shadow-[0_0_0_3px_rgba(251,191,36,.22),0_0_20px_rgba(245,158,11,.48)] ring-2 ring-amber-300 ring-offset-1"
+                            className="urgent-attention inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold ring-2 ring-amber-300 ring-offset-1"
                           >
                             <AlertTriangle className="size-3" />
                             Time overlap
@@ -3096,7 +3123,7 @@ function SpreadsheetBoard({
                           className={cn(
                             "inline-flex rounded-md px-2.5 py-1 text-[10px] font-bold",
                             isPendingDecision
-                              ? "animate-pulse bg-amber-100 text-amber-900 shadow-[0_0_0_3px_rgba(251,191,36,.28),0_0_26px_rgba(245,158,11,.7)] ring-2 ring-amber-300 ring-offset-1"
+                              ? "urgent-attention ring-2 ring-amber-300 ring-offset-1"
                               : decision === "going"
                                 ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300"
                                 : "bg-slate-100 text-slate-700",
@@ -3113,15 +3140,23 @@ function SpreadsheetBoard({
                         <span
                           className={cn(
                             "inline-flex rounded-md px-2 py-1 text-[10px] font-bold",
-                            decision === "going"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-slate-100 text-slate-700",
+                            isAdmin
+                              ? adminDecision === "confirmed"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : adminDecision === "rejected"
+                                  ? "bg-rose-100 text-rose-800"
+                                  : "urgent-attention ring-2 ring-amber-300 ring-offset-1"
+                              : decision === "going"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-slate-100 text-slate-700",
                           )}
                         >
                           {isAdmin
-                            ? item.responses.length
-                              ? `${adminDecisionSummary.confirmed} confirmed · ${adminDecisionSummary.pending} pending · ${adminDecisionSummary.rejected} rejected`
-                              : "No startup decisions"
+                            ? adminDecision === "confirmed"
+                              ? "Accepted"
+                              : adminDecision === "rejected"
+                                ? "Rejected"
+                                : "Pending"
                             : decision === "going"
                               ? "Confirmed"
                               : pretty(decision ?? "undecided")}
@@ -3130,9 +3165,6 @@ function SpreadsheetBoard({
                     </td>
                     <td className="px-3 py-2 align-top text-xs text-slate-600">
                       {priceNote}
-                    </td>
-                    <td className="px-3 py-2 align-top text-xs text-slate-600">
-                      {item.location || "London / TBC"}
                     </td>
                   </tr>
                 </Fragment>
@@ -3667,8 +3699,8 @@ function TimedEvent({
         "absolute z-20 overflow-hidden rounded-md border px-2 py-1 text-left shadow-sm transition hover:z-30 hover:shadow-md",
         calendarState(item, response?.decision),
         conflict
-          ? "animate-pulse border-rose-400 bg-rose-100/90 shadow-[0_0_0_3px_rgba(251,113,133,.24),0_0_24px_rgba(244,63,94,.55)]"
-          : hasScheduleOverlap && "animate-pulse border-amber-400 bg-amber-100/90 shadow-[0_0_0_3px_rgba(251,191,36,.22),0_0_20px_rgba(245,158,11,.45)]",
+          ? "urgent-attention"
+          : hasScheduleOverlap && "urgent-attention",
       )}
       style={style}
     >
@@ -3780,12 +3812,16 @@ function EventCard({
       (isAdmin || block.organisationId === profile.organisationId) &&
       overlaps(block.startsAt, block.endsAt, item.startsAt, item.endsAt),
   );
+  const decisionPending =
+    item.status !== "confirmed" &&
+    !["going", "acknowledged"].includes(response?.decision ?? "");
   return (
     <button
       onClick={onClick}
       className={cn(
         "w-full rounded-xl border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-md",
         calendarState(item, response?.decision),
+        (decisionPending || conflict) && "urgent-attention",
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -3798,8 +3834,8 @@ function EventCard({
           <span className={cn("size-1.5 rounded-full", meta.dot)} />
           {meta.label}
         </span>
-        {item.status !== "confirmed" && (
-          <span className="text-[9px] font-bold text-amber-700">
+        {decisionPending && (
+          <span className="urgent-attention rounded px-1.5 py-0.5 text-[9px] font-bold">
             Decision pending
           </span>
         )}
@@ -3987,15 +4023,17 @@ function BusinessMeetingsPage({
       </p>
       {isAdmin && (
         <>
-        <div className="mt-5 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4">
-          <h2 className="font-semibold text-indigo-950">Admin workflow</h2>
-          <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs leading-5 text-indigo-900">
+        <details open className="mt-5 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4">
+          <summary className="cursor-pointer font-semibold text-indigo-950">Admin workflow — adding and coordinating a meeting</summary>
+          <ol className="mt-3 list-decimal space-y-2 pl-5 text-xs leading-5 text-indigo-900">
             <li>Add a named institution or person with <strong>Add Potential Biz Meet</strong>.</li>
             <li>Choose <strong>Selected startups</strong> when only specific companies should see it; choose the same institution for several startups when appropriate.</li>
             <li>Open the row to edit the profile, link and general meeting details.</li>
             <li>Under <strong>Startup coordination</strong>, record each startup’s separate outreach status and one or more availability windows.</li>
+            <li>Use <strong>Contacted</strong> until the institution agrees, then choose <strong>Agreed</strong> or <strong>Rejected</strong> for that startup only.</li>
+            <li>Save after checking the audience and timing. The same institution can safely have different statuses and times for different startups.</li>
           </ol>
-        </div>
+        </details>
         <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,.03)]">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative min-w-0 flex-1">
@@ -4123,7 +4161,7 @@ function BusinessMeetingsPage({
                           className={cn(
                             "inline-flex rounded-md px-2.5 py-1 text-[10px] font-bold",
                             isPendingDecision
-                              ? "animate-pulse bg-amber-100 text-amber-900 shadow-[0_0_0_3px_rgba(251,191,36,.28),0_0_26px_rgba(245,158,11,.7)] ring-2 ring-amber-300 ring-offset-1"
+                              ? "urgent-attention ring-2 ring-amber-300 ring-offset-1"
                               : decision === "going"
                                 ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300"
                                 : "bg-slate-100 text-slate-700",
