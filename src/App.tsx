@@ -764,12 +764,16 @@ export default function App({
     });
   };
 
-  const saveDecision = (
+  const saveDecision = async (
     target: ScheduleItem,
     decision: Decision,
     note?: string,
   ) => {
     if (!profile.organisationId) return;
+    const organisationId = profile.organisationId;
+    const previousResponse = target.responses.find(
+      (response) => response.organisationId === organisationId,
+    );
     const createsConflict = Boolean(
       target.conflictGroupId &&
         ["going", "interested"].includes(decision) &&
@@ -793,10 +797,10 @@ export default function App({
               responses: [
                 ...item.responses.filter(
                   (response) =>
-                    response.organisationId !== profile.organisationId,
+                    response.organisationId !== organisationId,
                 ),
                 {
-                  organisationId: profile.organisationId!,
+                  organisationId,
                   decision,
                   note,
                   updatedAt: new Date().toISOString(),
@@ -805,20 +809,37 @@ export default function App({
             },
       ),
     );
-    if (productionMode && supabase)
-      void supabase
-        .from("event_responses")
-        .upsert(
-          {
-            schedule_item_id: target.id,
-            organisation_id: profile.organisationId,
-            decision,
-            note: note || null,
-            updated_by: profile.id,
-          },
-          { onConflict: "schedule_item_id,organisation_id" },
-        )
-        .then(({ error }) => error && showToast(error.message));
+    if (productionMode && supabase) {
+      const { error } = await supabase.from("event_responses").upsert(
+        {
+          schedule_item_id: target.id,
+          organisation_id: organisationId,
+          decision,
+          note: note || null,
+          updated_by: profile.id,
+        },
+        { onConflict: "schedule_item_id,organisation_id" },
+      );
+      if (error) {
+        setItems((current) =>
+          current.map((item) =>
+            item.id !== target.id
+              ? item
+              : {
+                  ...item,
+                  responses: [
+                    ...item.responses.filter(
+                      (response) => response.organisationId !== organisationId,
+                    ),
+                    ...(previousResponse ? [previousResponse] : []),
+                  ],
+                },
+          ),
+        );
+        showToast(`Decision could not be saved: ${error.message}`);
+        return;
+      }
+    }
     showToast(
       createsConflict
         ? "Saved — check the alternative-choice conflict"
