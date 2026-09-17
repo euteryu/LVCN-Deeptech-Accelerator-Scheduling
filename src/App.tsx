@@ -253,6 +253,8 @@ const isPotentialBizMeet = (item: ScheduleItem) =>
   item.itemType === "business_meeting" &&
   !isGenericBusinessMeetingSlot(item) &&
   !isConferenceOrEvent(item);
+const isSupersededDeepFusionMeeting = (item: ScheduleItem) =>
+  item.title.trim().toLowerCase() === "md one";
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -516,6 +518,7 @@ export default function App({
           (isAdmin ||
             item.itemType !== "business_meeting" ||
             !hiddenMeetingCategories.includes(meetingCategoryFor(item))) &&
+          (isAdmin || !isSupersededDeepFusionMeeting(item)) &&
           orgMatch &&
           (typeFilter === "all" || item.itemType === typeFilter) &&
           (statusFilter === "all" || item.status === statusFilter) &&
