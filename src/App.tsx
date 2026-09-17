@@ -233,7 +233,11 @@ const overlaps = (
   );
 const validTimestamp = (value: unknown) => {
   if (typeof value !== "string" || !value.trim()) return undefined;
-  return Number.isNaN(new Date(value).getTime()) ? undefined : value;
+  const parsed = new Date(value);
+  // Canonicalise accepted database values too. This keeps date-fns away from
+  // non-standard but browser-parseable timestamp strings from spreadsheet
+  // imports (the source of the production render failure).
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
 };
 const calendarState = (item: ScheduleItem, decision?: Decision) =>
   item.status === "confirmed" ||
