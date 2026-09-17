@@ -212,12 +212,9 @@ const bookingLabel = (value: string) =>
   value === "not_required" ? "Free attendance" : pretty(value);
 const dateLabel = (item: ScheduleItem) =>
   item.startsAt
-    ? format(
-        new Date(item.startsAt),
-        item.timePrecision === "all_day"
-          ? "EEE d MMM · All day"
-          : "EEE d MMM · HH:mm",
-      )
+    ? item.timePrecision === "all_day"
+      ? `${format(new Date(item.startsAt), "EEE d MMM")} · All day`
+      : format(new Date(item.startsAt), "EEE d MMM · HH:mm")
     : "Time to confirm";
 const overlaps = (
   startA: string,
