@@ -31,6 +31,8 @@ import {
   CircleHelp,
   Clock3,
   Download,
+  Eye,
+  EyeOff,
   ExternalLink,
   FileDown,
   Filter,
@@ -108,7 +110,7 @@ type Language = "en" | "ko";
 const uiText = {
   en: {
     schedule: "Schedule",
-    businessMeetings: "Business meetings",
+    businessMeetings: "Potential Biz Meets",
     cohortDecisions: "Cohort decisions",
     myDecisions: "My decisions",
     venueLocation: "Venue Location",
@@ -172,7 +174,7 @@ const koreanUiText = {
   ...uiText.en,
   language: "\uD55C\uAD6D\uC5B4",
   schedule: "\uC77C\uC815",
-  businessMeetings: "\uBE44\uC988\uB2C8\uC2A4 \uBBF8\uD305",
+  businessMeetings: "Potential Biz Meets",
   cohortDecisions: "\uCF54\uD638\uD2B8 \uACB0\uC815",
   myDecisions: "\uB098\uC758 \uACB0\uC815",
   venueLocation: "\uD589\uC0AC \uC7A5\uC18C",
@@ -234,6 +236,10 @@ const nextWorkingDay = (date: Date, direction: 1 | -1) => {
     next = addDays(next, direction);
   return next;
 };
+const meetingCategoryFor = (item: ScheduleItem) =>
+  item.meetingCategory ??
+  item.description?.match(/^Category:\s*([^\n]+)/)?.[1] ??
+  "Business meeting";
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -279,6 +285,12 @@ export default function App({
     initialProfile ?? profiles[0],
   );
   const [items, setItems] = useState(productionMode ? [] : seedItems);
+  const [hiddenMeetingCategories, setHiddenMeetingCategories] = useState<
+    string[]
+  >(productionMode ? [] : ["Business meeting"]);
+  const [hiddenSections, setHiddenSections] = useState<string[]>(
+    productionMode ? [] : ["toilets"],
+  );
   const [undoStack, setUndoStack] = useState<ScheduleItem[][]>([]);
   const [redoStack, setRedoStack] = useState<ScheduleItem[][]>([]);
   const [availability, setAvailability] = useState(
@@ -339,6 +351,8 @@ export default function App({
       const [
         { data: scheduleRows, error: scheduleError },
         { data: availabilityRows, error: availabilityError },
+        { data: categoryRows, error: categoryError },
+        { data: sectionRows, error: sectionError },
       ] = await Promise.all([
         client
           .from("schedule_items")
@@ -350,11 +364,17 @@ export default function App({
           .from("availability_blocks")
           .select("id,organisation_id,title,note,starts_at,ends_at")
           .order("starts_at"),
+        client
+          .from("meeting_category_visibility")
+          .select("category,visible_to_startups"),
+        client.from("app_section_visibility").select("section_id,visible_to_startups"),
       ]);
-      if (scheduleError || availabilityError) {
+      if (scheduleError || availabilityError || categoryError || sectionError) {
         setToast(
           scheduleError?.message ??
             availabilityError?.message ??
+            categoryError?.message ??
+            sectionError?.message ??
             "Could not load programme",
         );
         return;
@@ -384,6 +404,10 @@ export default function App({
           fit: row.fit ?? undefined,
           nextAction: row.next_action ?? undefined,
           sourceNote: row.source_note ?? undefined,
+          meetingCategory: row.meeting_category ?? undefined,
+          meetingStatus: row.meeting_status ?? undefined,
+          contactName: row.contact_name ?? undefined,
+          meetingNote: row.meeting_note ?? undefined,
           conflictGroupId:
             row.schedule_item_conflict_groups[0]?.conflict_group_id,
           responses: row.event_responses.map((response: any) => ({
@@ -393,6 +417,16 @@ export default function App({
             updatedAt: response.updated_at,
           })),
         })),
+      );
+      setHiddenMeetingCategories(
+        (categoryRows ?? [])
+          .filter((row: any) => !row.visible_to_startups)
+          .map((row: any) => row.category),
+      );
+      setHiddenSections(
+        (sectionRows ?? [])
+          .filter((row: any) => !row.visible_to_startups)
+          .map((row: any) => row.section_id),
       );
       setAvailability(
         (availabilityRows ?? []).map((row: any) => ({
@@ -430,6 +464,16 @@ export default function App({
         { event: "*", schema: "public", table: "availability_blocks" },
         () => window.dispatchEvent(new Event("programme-refresh")),
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "meeting_category_visibility" },
+        () => window.dispatchEvent(new Event("programme-refresh")),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "app_section_visibility" },
+        () => window.dispatchEvent(new Event("programme-refresh")),
+      )
       .subscribe();
     return () => {
       void client.removeChannel(channel);
@@ -456,6 +500,9 @@ export default function App({
           item.organisationIds.includes(organisationFilter);
         return (
           allowed &&
+          (isAdmin ||
+            item.itemType !== "business_meeting" ||
+            !hiddenMeetingCategories.includes(meetingCategoryFor(item))) &&
           orgMatch &&
           (typeFilter === "all" || item.itemType === typeFilter) &&
           (statusFilter === "all" || item.status === statusFilter) &&
@@ -470,6 +517,7 @@ export default function App({
       typeFilter,
       statusFilter,
       search,
+      hiddenMeetingCategories,
     ],
   );
 
@@ -601,6 +649,10 @@ export default function App({
       fit: item.fit || null,
       next_action: item.nextAction || null,
       source_note: item.sourceNote || null,
+      meeting_category: item.meetingCategory || null,
+      meeting_status: item.meetingStatus || null,
+      contact_name: item.contactName || null,
+      meeting_note: item.meetingNote || null,
       created_by: profile.id,
     });
     if (error) {
@@ -685,6 +737,11 @@ export default function App({
             priority: item.priority,
             fit: item.fit || null,
             next_action: item.nextAction || null,
+            source_note: item.sourceNote || null,
+            meeting_category: item.meetingCategory || null,
+            meeting_status: item.meetingStatus || null,
+            contact_name: item.contactName || null,
+            meeting_note: item.meetingNote || null,
           })
           .eq("id", item.id);
         if (error) {
@@ -704,6 +761,42 @@ export default function App({
           );
       })();
     showToast("Item updated");
+  };
+  const setMeetingCategoryVisible = (category: string, visible: boolean) => {
+    setHiddenMeetingCategories((current) =>
+      visible
+        ? current.filter((value) => value !== category)
+        : [...new Set([...current, category])],
+    );
+    if (productionMode && supabase)
+      void supabase
+        .from("meeting_category_visibility")
+        .upsert(
+          { category, visible_to_startups: visible, updated_by: profile.id },
+          { onConflict: "category" },
+        )
+        .then(({ error }) => error && showToast(error.message));
+    showToast(
+      `${category} is now ${visible ? "visible to" : "hidden from"} startups`,
+    );
+  };
+  const setSectionVisible = (sectionId: string, visible: boolean) => {
+    setHiddenSections((current) =>
+      visible
+        ? current.filter((value) => value !== sectionId)
+        : [...new Set([...current, sectionId])],
+    );
+    if (productionMode && supabase)
+      void supabase
+        .from("app_section_visibility")
+        .upsert(
+          { section_id: sectionId, visible_to_startups: visible, updated_by: profile.id },
+          { onConflict: "section_id" },
+        )
+        .then(({ error }) => error && showToast(error.message));
+    showToast(
+      `${sectionId.replaceAll("-", " ")} is now ${visible ? "visible to" : "hidden from"} startups`,
+    );
   };
   const changeCalendarView = (nextView: ViewMode) => {
     setView(nextView);
@@ -759,6 +852,8 @@ export default function App({
         onBusy={() => setBusyOpen(true)}
         language={language}
         setLanguage={setLanguage}
+        hiddenSections={hiddenSections}
+        onSectionVisibilityChange={setSectionVisible}
       />
       <div className={cn(sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-[232px]")}>
         <Topbar
@@ -804,10 +899,15 @@ export default function App({
           ) : page === "business-meetings" ? (
             <BusinessMeetingsPage
               items={visibleItems.filter(
-                (item) => item.itemType === "business_meeting",
+                (item) =>
+                  item.itemType === "business_meeting" &&
+                  meetingCategoryFor(item) !== "Business meeting",
               )}
               isAdmin={isAdmin}
               profile={profile}
+              hiddenCategories={hiddenMeetingCategories}
+              onCategoryVisibilityChange={setMeetingCategoryVisible}
+              onDecision={saveDecision}
               onSelect={setSelectedId}
               language={language}
             />
@@ -1020,6 +1120,8 @@ function Sidebar({
   onClose,
   onNavigate,
   onBusy,
+  hiddenSections,
+  onSectionVisibilityChange,
 }: {
   profile: Profile;
   language: Language;
@@ -1040,8 +1142,11 @@ function Sidebar({
       | "external-events",
   ) => void;
   onBusy: () => void;
+  hiddenSections: string[];
+  onSectionVisibilityChange: (sectionId: string, visible: boolean) => void;
 }) {
   const copy = language === "ko" ? koreanUiText : uiText.en;
+  const [tutorialOpen, setTutorialOpen] = useState(false);
   const nav = [
     { id: "calendar", label: copy.schedule, icon: CalendarDays },
     { id: "business-meetings", label: copy.businessMeetings, icon: Building2 },
@@ -1119,9 +1224,16 @@ function Sidebar({
           </span>
         </button>
         <nav className="space-y-1">
-          {nav.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
+          {nav
+            .filter(
+              ({ id }) =>
+                profile.role === "lvnc_admin" || !hiddenSections.includes(id),
+            )
+            .map(({ id, label, icon: Icon }) => {
+              const visibleToStartups = !hiddenSections.includes(id);
+              return (
+              <div key={id} className="group flex items-center gap-1">
+                <button
               onClick={() => {
                 onNavigate(
                   id as
@@ -1137,7 +1249,7 @@ function Sidebar({
               }}
               title={collapsed ? label : undefined}
               className={cn(
-                "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
+                "flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
                 collapsed && "lg:justify-center lg:px-2",
                 page === id
                   ? "bg-slate-950 text-white"
@@ -1147,7 +1259,20 @@ function Sidebar({
               <Icon className="size-[18px] shrink-0" />
               <span className={cn(collapsed && "lg:hidden")}>{label}</span>
             </button>
-          ))}
+            {profile.role === "lvnc_admin" && !collapsed && (
+              <button
+                type="button"
+                onClick={() => onSectionVisibilityChange(id, !visibleToStartups)}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-900"
+                title={visibleToStartups ? "Hide from startups" : "Show to startups"}
+                aria-label={`${visibleToStartups ? "Hide" : "Show"} ${label} for startups`}
+              >
+                {visibleToStartups ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+              </button>
+            )}
+              </div>
+            );
+            })}
           {profile.role === "startup_member" && (
             <button
               onClick={() => {
@@ -1203,6 +1328,18 @@ function Sidebar({
         </a>
         <button
           type="button"
+          onClick={() => setTutorialOpen(true)}
+          title={collapsed ? "Tutorial" : undefined}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+            collapsed && "lg:justify-center lg:px-2",
+          )}
+        >
+          <CircleHelp className="size-[18px] shrink-0" />
+          <span className={cn(collapsed && "lg:hidden")}>Tutorial</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setLanguage(language === "en" ? "ko" : "en")}
           title={collapsed ? copy.language : undefined}
           aria-label={`Switch language to ${copy.language}`}
@@ -1216,8 +1353,43 @@ function Sidebar({
             {language === "en" ? "한국어" : "English"}
           </span>
         </button>
+        <TutorialDialog open={tutorialOpen} setOpen={setTutorialOpen} />
       </aside>
     </Fragment>
+  );
+}
+
+function TutorialDialog({
+  open,
+  setOpen,
+}: {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-w-4xl">
+        <DialogTitle>How to use the programme board</DialogTitle>
+        <DialogDescription>
+          Five quick ways to interact with the app.
+        </DialogDescription>
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          {[1, 2, 3, 4, 5].map((step) => (
+            <figure key={step} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+              <img
+                src={`/tutorial/df${step}.png`}
+                alt={`Tutorial step ${step}`}
+                loading="lazy"
+                className="w-full bg-white"
+              />
+              <figcaption className="px-3 py-2 text-xs font-semibold text-slate-600">
+                Tutorial {step} of 5
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -3030,21 +3202,28 @@ function BusinessMeetingsPage({
   items,
   isAdmin,
   profile,
+  hiddenCategories,
+  onCategoryVisibilityChange,
+  onDecision,
   onSelect,
   language,
 }: {
   items: ScheduleItem[];
   isAdmin: boolean;
   profile: Profile;
+  hiddenCategories: string[];
+  onCategoryVisibilityChange: (category: string, visible: boolean) => void;
+  onDecision: (item: ScheduleItem, decision: Decision) => void;
   onSelect: (id: string) => void;
   language: Language;
 }) {
   const copy = language === "ko" ? koreanUiText : uiText.en;
   const [adminSearch, setAdminSearch] = useState("");
-  const categoryFor = (item: ScheduleItem) =>
-    item.meetingCategory ??
-    item.description?.match(/^Category:\s*([^\n]+)/)?.[1] ??
-    "Business meeting";
+  const [pendingDecision, setPendingDecision] = useState<{
+    item: ScheduleItem;
+    decision: Decision;
+  }>();
+  const categoryFor = meetingCategoryFor;
   const noteFor = (item: ScheduleItem) =>
     item.meetingNote ?? item.description?.match(/\nNote:\s*(.*)$/)?.[1] ?? "";
   const statusFor = (item: ScheduleItem) =>
@@ -3054,28 +3233,28 @@ function BusinessMeetingsPage({
       : item.bookingStatus === "details_to_verify"
         ? "Contacted"
         : "Open");
-  const decisionLabel = (item: ScheduleItem) => {
-    const response = item.responses.find(
+  const decisionFor = (item: ScheduleItem) =>
+    item.responses.find(
       (entry) => entry.organisationId === profile.organisationId,
-    );
-    if (!response) return "";
-    if (response.decision === "going") return "Agreed";
-    if (response.decision === "pass") return "Rejected";
-    return "Pending";
+    )?.decision;
+  const commitDecision = (decision: Decision) => {
+    if (!pendingDecision) return;
+    onDecision(pendingDecision.item, decision);
+    setPendingDecision(undefined);
   };
   const categoryStyleFor = (category: string) => {
     const value = category.toLowerCase();
     if (value.includes("vc") || value.includes("invest"))
-      return "bg-sky-100 text-sky-800 ring-sky-200";
+      return "text-sky-700";
     if (value.includes("defence") || value.includes("security"))
-      return "bg-orange-100 text-orange-800 ring-orange-200";
+      return "text-orange-700";
     if (value.includes("health") || value.includes("medical"))
-      return "bg-fuchsia-100 text-fuchsia-800 ring-fuchsia-200";
+      return "text-fuchsia-700";
     if (value.includes("academic") || value.includes("research"))
-      return "bg-violet-100 text-violet-800 ring-violet-200";
+      return "text-violet-700";
     if (value.includes("corporate") || value.includes("cvc"))
-      return "bg-cyan-100 text-cyan-800 ring-cyan-200";
-    return "bg-emerald-100 text-emerald-800 ring-emerald-200";
+      return "text-cyan-700";
+    return "text-emerald-700";
   };
   const query = adminSearch.trim().toLowerCase();
   const matchesAdminSearch = (item: ScheduleItem) => {
@@ -3133,16 +3312,45 @@ function BusinessMeetingsPage({
             Search results stay in the table so repeated institutions or
             contacts across startups remain visible together.
           </p>
+          <div className="mt-3 border-t border-slate-100 pt-3">
+            <p className="px-1 text-xs font-bold text-slate-700">
+              Startup visibility by category
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {[...new Set(items.map(categoryFor))]
+                .sort()
+                .map((category) => {
+                  const visible = !hiddenCategories.includes(category);
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => onCategoryVisibilityChange(category, !visible)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition",
+                        visible
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                          : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200",
+                      )}
+                      aria-pressed={visible}
+                    >
+                      {visible ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+                      {category}: {visible ? "shown" : "hidden"}
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
         </div>
       )}
       <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.03)]">
         <div className="overflow-x-auto">
-          <table className="min-w-[980px] w-full border-collapse text-left text-sm">
+          <table className="min-w-[1080px] w-full border-collapse text-left text-sm">
             <thead className="bg-[#286c58] text-[11px] font-bold text-white">
               <tr>
                 <th className="px-4 py-2.5">Institution</th>
                 <th className="px-4 py-2.5">Category</th>
-                {isAdmin && <th className="px-4 py-2.5">SVC decision</th>}
+                <th className="px-4 py-2.5">Decision</th>
                 <th className="px-4 py-2.5">Status</th>
                 {isAdmin && <th className="px-4 py-2.5">Person</th>}
                 <th className="px-4 py-2.5">Time</th>
@@ -3153,6 +3361,12 @@ function BusinessMeetingsPage({
               {items.map((item) => {
                 const category = categoryFor(item);
                 const searchMatch = isAdmin && matchesAdminSearch(item);
+                const decision = decisionFor(item);
+                const isPendingDecision =
+                  !decision ||
+                  ["undecided", "interested", "acknowledged"].includes(
+                    decision,
+                  );
                 return (
                   <tr
                     key={item.id}
@@ -3174,29 +3388,56 @@ function BusinessMeetingsPage({
                     <td className="px-4 py-3 text-slate-600">
                       <span
                         className={cn(
-                          "inline-flex rounded-full px-2.5 py-1 text-xs font-bold ring-1 ring-inset",
+                          "text-xs font-bold",
                           categoryStyleFor(category),
                         )}
                       >
                         {category}
                       </span>
                     </td>
-                    {isAdmin && (
-                      <td className="px-4 py-3">
-                        <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold">
-                          {decisionLabel(item)}
-                        </span>
-                      </td>
-                    )}
+                    <td className="px-4 py-3">
+                      {profile.organisationId ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setPendingDecision({
+                              item,
+                              decision:
+                                decision === "pass"
+                                  ? "going"
+                                  : (decision ?? "going"),
+                            });
+                          }}
+                          className={cn(
+                            "inline-flex rounded-md px-2.5 py-1 text-[10px] font-bold",
+                            isPendingDecision
+                              ? "animate-pulse bg-amber-100 text-amber-900 shadow-[0_0_0_3px_rgba(251,191,36,.28),0_0_26px_rgba(245,158,11,.7)] ring-2 ring-amber-300 ring-offset-1"
+                              : decision === "going"
+                                ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300"
+                                : "bg-slate-100 text-slate-700",
+                            "hover:bg-indigo-100 hover:text-indigo-800 hover:shadow-none",
+                          )}
+                        >
+                          {isPendingDecision
+                            ? "Pending"
+                            : decision === "going"
+                              ? "Confirm"
+                              : "Reject"}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={cn(
-                          "inline-flex rounded-full px-2.5 py-1 text-xs font-bold ring-1 ring-inset",
+                          "text-xs font-bold",
                           statusFor(item) === "Agreed"
-                            ? "bg-emerald-100 text-emerald-800 ring-emerald-200"
+                            ? "text-emerald-700"
                             : statusFor(item) === "Contacted"
-                              ? "bg-amber-100 text-amber-800 ring-amber-200"
-                              : "bg-slate-100 text-slate-700 ring-slate-200",
+                              ? "text-amber-700"
+                              : "text-slate-600",
                         )}
                       >
                         {statusFor(item)}
@@ -3225,6 +3466,15 @@ function BusinessMeetingsPage({
           </p>
         )}
       </div>
+      {pendingDecision && (
+        <div className="fixed bottom-5 left-1/2 z-[80] flex -translate-x-1/2 items-center gap-3 rounded-xl bg-slate-950 px-4 py-3 text-sm text-white shadow-2xl">
+          <span>Choose a decision for “{pendingDecision.item.title}”</span>
+          <button type="button" onClick={() => commitDecision("going")} className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-400">Confirm</button>
+          <button type="button" onClick={() => commitDecision("pass")} className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-400">Reject</button>
+          <button type="button" onClick={() => commitDecision("undecided")} className="rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-300">Pending</button>
+          <button type="button" onClick={() => setPendingDecision(undefined)} className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/20">Cancel</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -3845,6 +4095,22 @@ function CreateDialog({
       nextAction:
         String(data.get("nextAction")) || "Review details and confirm.",
       sourceNote: item?.sourceNote,
+      meetingCategory:
+        itemType === "business_meeting"
+          ? String(data.get("meetingCategory")) || "Business meeting"
+          : undefined,
+      meetingStatus:
+        itemType === "business_meeting"
+          ? String(data.get("meetingStatus")) || "Open"
+          : undefined,
+      contactName:
+        itemType === "business_meeting"
+          ? String(data.get("contactName")) || undefined
+          : undefined,
+      meetingNote:
+        itemType === "business_meeting"
+          ? String(data.get("meetingNote")) || undefined
+          : undefined,
       conflictGroupId: item?.conflictGroupId,
       responses: item?.responses ?? [],
     });
@@ -4025,6 +4291,31 @@ function CreateDialog({
                   <option value="recommended">Recommended</option>
                   <option value="compulsory">Compulsory</option>
                 </Select>
+              </div>
+            )}
+            {itemType === "business_meeting" && (
+              <div className="grid gap-4 rounded-xl border border-teal-200 bg-teal-50/50 p-4 sm:col-span-2 sm:grid-cols-2">
+                <div>
+                  <FieldLabel>Meeting category *</FieldLabel>
+                  <Input
+                    name="meetingCategory"
+                    required
+                    defaultValue={item?.meetingCategory ?? "Business meeting"}
+                    placeholder="e.g. VCs, Defence & Security"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Meeting status</FieldLabel>
+                  <Input name="meetingStatus" defaultValue={item?.meetingStatus ?? "Open"} />
+                </div>
+                <div>
+                  <FieldLabel>Contact (optional)</FieldLabel>
+                  <Input name="contactName" defaultValue={item?.contactName} />
+                </div>
+                <div>
+                  <FieldLabel>Meeting note (optional)</FieldLabel>
+                  <Input name="meetingNote" defaultValue={item?.meetingNote} />
+                </div>
               </div>
             )}
             <div>
