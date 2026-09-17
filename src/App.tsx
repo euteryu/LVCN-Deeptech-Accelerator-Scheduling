@@ -2837,6 +2837,7 @@ void LegacySpreadsheetBoard;
 function SpreadsheetBoard({
   items,
   availability,
+  isAdmin,
   profile,
   anchorDate,
   onSelectDay,
@@ -2931,6 +2932,15 @@ function SpreadsheetBoard({
                 (response) =>
                   response.organisationId === profile.organisationId,
               )?.decision;
+              const adminDecisionSummary = item.responses.reduce(
+                (summary, response) => {
+                  if (["going", "acknowledged"].includes(response.decision)) summary.confirmed += 1;
+                  else if (response.decision === "pass") summary.rejected += 1;
+                  else summary.pending += 1;
+                  return summary;
+                },
+                { pending: 0, confirmed: 0, rejected: 0 },
+              );
               const isPendingDecision =
                 !decision ||
                 ["undecided", "interested", "acknowledged"].includes(decision);
@@ -3108,9 +3118,13 @@ function SpreadsheetBoard({
                               : "bg-slate-100 text-slate-700",
                           )}
                         >
-                          {decision === "going"
-                            ? "Confirmed"
-                            : pretty(decision ?? "undecided")}
+                          {isAdmin
+                            ? item.responses.length
+                              ? `${adminDecisionSummary.confirmed} confirmed · ${adminDecisionSummary.pending} pending · ${adminDecisionSummary.rejected} rejected`
+                              : "No startup decisions"
+                            : decision === "going"
+                              ? "Confirmed"
+                              : pretty(decision ?? "undecided")}
                         </span>
                       )}
                     </td>
