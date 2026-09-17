@@ -460,6 +460,7 @@ export default function App({
     productionMode ? [] : seedAvailability,
   );
   const [selectedId, setSelectedId] = useState<string>();
+  const [highlightMeetingNote, setHighlightMeetingNote] = useState(false);
   const [page, setPage] = useState<
     | "calendar"
     | "business-meetings"
@@ -1088,7 +1089,11 @@ export default function App({
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed((value) => !value)}
         onClose={() => setMobileMenu(false)}
-        onNavigate={setPage}
+        onNavigate={(nextPage) => {
+          setSelectedId(undefined);
+          setHighlightMeetingNote(false);
+          setPage(nextPage);
+        }}
         onBusy={() => setBusyOpen(true)}
         language={language}
         setLanguage={setLanguage}
@@ -1150,7 +1155,14 @@ export default function App({
               hiddenCategories={hiddenMeetingCategories}
               onCategoryVisibilityChange={setMeetingCategoryVisible}
               onDecision={saveDecision}
-              onSelect={setSelectedId}
+              onSelect={(id) => {
+                setHighlightMeetingNote(false);
+                setSelectedId(id);
+              }}
+              onSelectNote={(id) => {
+                setHighlightMeetingNote(true);
+                setSelectedId(id);
+              }}
               language={language}
             />
           ) : page === "calendar" ? (
@@ -1254,7 +1266,11 @@ export default function App({
           isAdmin={isAdmin}
           profile={profile}
           availability={availability}
-          onClose={() => setSelectedId(undefined)}
+          highlightMeetingNote={highlightMeetingNote}
+          onClose={() => {
+            setSelectedId(undefined);
+            setHighlightMeetingNote(false);
+          }}
           onDecision={updateDecision}
           onEdit={() => setEditOpen(true)}
           onDuplicate={() => duplicateItem(selected)}
@@ -1404,7 +1420,7 @@ function Sidebar({
           status: "상태",
           person: "담당자",
           time: "시간",
-          note: "메모",
+          note: "메모 보기",
           pending: "검토 대기",
           confirm: "확인",
           reject: "거절",
@@ -1418,7 +1434,7 @@ function Sidebar({
           status: "Status",
           person: "Person",
           time: "Time",
-          note: "Note",
+          note: "Read note",
           pending: "Pending",
           confirm: "Confirm",
           reject: "Reject",
@@ -2752,6 +2768,14 @@ function SpreadsheetBoard({
     item: ScheduleItem;
     decision: Decision;
   }>();
+  useEffect(() => {
+    if (!pendingDecision) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPendingDecision(undefined);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [pendingDecision]);
   const rows = items
     .filter(
       (item) =>
@@ -3732,6 +3756,7 @@ function BusinessMeetingsPage({
   onCategoryVisibilityChange,
   onDecision,
   onSelect,
+  onSelectNote,
   language,
 }: {
   items: ScheduleItem[];
@@ -3741,6 +3766,7 @@ function BusinessMeetingsPage({
   onCategoryVisibilityChange: (category: string, visible: boolean) => void;
   onDecision: (item: ScheduleItem, decision: Decision) => void;
   onSelect: (id: string) => void;
+  onSelectNote: (id: string) => void;
   language: Language;
 }) {
   const copy = language === "ko" ? koreanUiText : uiText.en;
@@ -3779,16 +3805,26 @@ function BusinessMeetingsPage({
     item: ScheduleItem;
     decision: Decision;
   }>();
+  useEffect(() => {
+    if (!pendingDecision) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPendingDecision(undefined);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [pendingDecision]);
   const categoryFor = meetingCategoryFor;
   const noteFor = (item: ScheduleItem) =>
     item.meetingNote ?? item.description?.match(/\nNote:\s*(.*)$/)?.[1] ?? "";
-  const statusFor = (item: ScheduleItem) =>
-    item.meetingStatus ??
+  const statusFor = (item: ScheduleItem) => {
+    const status = item.meetingStatus ??
     (item.status === "confirmed"
       ? "Agreed"
       : item.bookingStatus === "details_to_verify"
         ? "Contacted"
-        : "Open");
+        : "Contacted");
+    return status.trim().toLowerCase() === "open" ? "Contacted" : status;
+  };
   const decisionFor = (item: ScheduleItem) =>
     item.responses.find(
       (entry) => entry.organisationId === profile.organisationId,
@@ -3901,21 +3937,22 @@ function BusinessMeetingsPage({
       )}
       <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.03)]">
         <div className="overflow-x-auto">
-          <table className="min-w-[1080px] w-full border-collapse text-left text-sm">
+          <table className="min-w-[980px] w-full border-collapse text-left text-sm">
             <thead className="bg-[#286c58] text-[11px] font-bold text-white">
               <tr>
-                <th className="px-4 py-2.5">{businessCopy.institution}</th>
+                <th className="min-w-[280px] px-4 py-2.5">{businessCopy.institution}</th>
                 <th className="px-4 py-2.5">{businessCopy.category}</th>
                 <th className="px-4 py-2.5">{businessCopy.decision}</th>
                 <th className="px-4 py-2.5">{businessCopy.status}</th>
                 {isAdmin && <th className="px-4 py-2.5">{businessCopy.person}</th>}
                 <th className="px-4 py-2.5">{businessCopy.time}</th>
-                <th className="px-4 py-2.5">{businessCopy.note}</th>
+                <th className="w-20 px-4 py-2.5 text-center">{businessCopy.note}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {items.map((item) => {
                 const category = categoryFor(item);
+                const note = noteFor(item);
                 const searchMatch = isAdmin && matchesAdminSearch(item);
                 const decision = decisionFor(item);
                 const isPendingDecision =
@@ -4007,8 +4044,24 @@ function BusinessMeetingsPage({
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       {item.startsAt ? dateLabel(item) : "Time to confirm"}
                     </td>
-                    <td className="max-w-[360px] px-4 py-3 text-slate-600">
-                      {noteFor(item)}
+                    <td className="w-20 px-4 py-3 text-center">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onSelectNote(item.id);
+                        }}
+                        title={note ? "Open meeting note" : "No meeting note"}
+                        aria-label={note ? `Open note for ${item.title}` : `No note for ${item.title}`}
+                        className={cn(
+                          "inline-flex size-6 items-center justify-center rounded border transition",
+                          note
+                            ? "border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                            : "border-slate-200 bg-white text-transparent hover:border-slate-300",
+                        )}
+                      >
+                        {note && <Check className="size-4" />}
+                      </button>
                     </td>
                   </tr>
                 );
@@ -4197,6 +4250,7 @@ function ItemDrawer({
   isAdmin,
   profile,
   availability,
+  highlightMeetingNote,
   onClose,
   onDecision,
   onEdit,
@@ -4208,6 +4262,7 @@ function ItemDrawer({
   isAdmin: boolean;
   profile: Profile;
   availability: AvailabilityBlock[];
+  highlightMeetingNote: boolean;
   onClose: () => void;
   onDecision: (decision: Decision, note?: string) => void;
   onEdit: () => void;
@@ -4230,6 +4285,13 @@ function ItemDrawer({
     item.itemType === "business_meeting"
       ? "Open organisation profile"
       : "Open official event page";
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
   const decisions: Decision[] = ["going", "undecided", "pass"];
   return (
     <>
@@ -4357,6 +4419,21 @@ function ItemDrawer({
               </h3>
               <p className="mt-2 text-sm font-medium leading-6 text-slate-800">
                 {item.nextAction}
+              </p>
+            </section>
+          )}
+          {item.meetingNote && (
+            <section
+              className={cn(
+                "mt-6 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 transition",
+                highlightMeetingNote && "note-flash border-indigo-400 bg-indigo-100 ring-4 ring-indigo-200",
+              )}
+            >
+              <h3 className="text-xs font-bold uppercase tracking-[.12em] text-indigo-700">
+                Meeting note
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-slate-700">
+                {item.meetingNote}
               </p>
             </section>
           )}
@@ -4701,7 +4778,7 @@ function CreateDialog({
           : undefined,
       meetingStatus:
         itemType === "business_meeting"
-          ? String(data.get("meetingStatus")) || "Open"
+          ? String(data.get("meetingStatus")) || "Contacted"
           : undefined,
       contactName:
         itemType === "business_meeting"
@@ -4906,7 +4983,7 @@ function CreateDialog({
                 </div>
                 <div>
                   <FieldLabel>Meeting status</FieldLabel>
-                  <Input name="meetingStatus" defaultValue={item?.meetingStatus ?? "Open"} />
+                  <Input name="meetingStatus" defaultValue={item?.meetingStatus ?? "Contacted"} />
                 </div>
                 <div>
                   <FieldLabel>Contact (optional)</FieldLabel>
