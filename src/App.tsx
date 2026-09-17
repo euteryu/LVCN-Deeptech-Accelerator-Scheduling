@@ -231,6 +231,10 @@ const overlaps = (
       new Date(startA) < new Date(endB) &&
       new Date(endA) > new Date(startB),
   );
+const validTimestamp = (value: unknown) => {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  return Number.isNaN(new Date(value).getTime()) ? undefined : value;
+};
 const calendarState = (item: ScheduleItem, decision?: Decision) =>
   item.status === "confirmed" ||
   ["going", "acknowledged"].includes(decision ?? "")
@@ -517,8 +521,11 @@ export default function App({
             (entry: any) => entry.organisation_id,
           ),
           attendanceRule: row.attendance_rule,
-          startsAt: row.starts_at ?? undefined,
-          endsAt: row.ends_at ?? undefined,
+          // Imported sheets can contain placeholders such as "TBC" in a
+          // timestamp column. Do not let one malformed row take down the
+          // whole board; render it as "Time to confirm" instead.
+          startsAt: validTimestamp(row.starts_at),
+          endsAt: validTimestamp(row.ends_at),
           timePrecision: row.time_precision,
           location: row.location ?? undefined,
           eventUrl: row.event_url ?? row.meeting_link ?? undefined,
@@ -556,14 +563,20 @@ export default function App({
           .map((row: any) => row.section_id),
       );
       setAvailability(
-        (availabilityRows ?? []).map((row: any) => ({
-          id: row.id,
-          organisationId: row.organisation_id,
-          title: row.title,
-          note: row.note ?? undefined,
-          startsAt: row.starts_at,
-          endsAt: row.ends_at,
-        })),
+        (availabilityRows ?? []).flatMap((row: any) => {
+          const startsAt = validTimestamp(row.starts_at);
+          const endsAt = validTimestamp(row.ends_at);
+          return startsAt && endsAt
+            ? [{
+                id: row.id,
+                organisationId: row.organisation_id,
+                title: row.title,
+                note: row.note ?? undefined,
+                startsAt,
+                endsAt,
+              }]
+            : [];
+        }),
       );
     };
     void load();
