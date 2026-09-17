@@ -239,6 +239,31 @@ const validTimestamp = (value: unknown) => {
   // imports (the source of the production render failure).
   return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
 };
+const scheduleItemValues = (item: ScheduleItem) => ({
+  title: item.title,
+  description: item.description || null,
+  item_type: item.itemType,
+  visibility_scope: item.visibilityScope,
+  attendance_rule: item.attendanceRule,
+  starts_at: item.startsAt || null,
+  ends_at: item.endsAt || null,
+  time_precision: item.timePrecision,
+  location: item.location || null,
+  event_url: item.eventUrl || null,
+  registration_deadline: item.registrationDeadline || null,
+  cost_type: item.costType,
+  cost_note: item.costNote || null,
+  status: item.status,
+  booking_status: item.bookingStatus,
+  priority: item.priority,
+  fit: item.fit || null,
+  next_action: item.nextAction || null,
+  source_note: item.sourceNote || null,
+  meeting_category: item.meetingCategory || null,
+  meeting_status: item.meetingStatus || null,
+  contact_name: item.contactName || null,
+  meeting_note: item.meetingNote || null,
+});
 const calendarState = (item: ScheduleItem, decision?: Decision) =>
   item.status === "confirmed" ||
   ["going", "acknowledged"].includes(decision ?? "")
@@ -470,6 +495,7 @@ export default function App({
     { kind: "excel" | "pdf"; progress: number } | undefined
   >();
   const exportCancelled = useRef(false);
+  const historySyncRef = useRef(Promise.resolve());
   const [language, setLanguage] = useState<Language>(() =>
     window.localStorage.getItem("lvcn-language") === "ko" ? "ko" : "en",
   );
@@ -688,20 +714,20 @@ export default function App({
     if (!previous) return;
     setUndoStack((current) => current.slice(0, -1));
     setItems((current) => {
-      setRedoStack((future) => [...future, current]);
+      setRedoStack((future) => [...future.slice(-19), current]);
+      void restoreHistoryItems(current, previous, "Undo");
       return previous;
     });
-    showToast("Undid last schedule change");
   };
   const redoItems = () => {
     const next = redoStack.at(-1);
     if (!next) return;
     setRedoStack((current) => current.slice(0, -1));
     setItems((current) => {
-      setUndoStack((past) => [...past, current]);
+      setUndoStack((past) => [...past.slice(-19), current]);
+      void restoreHistoryItems(current, next, "Redo");
       return next;
     });
-    showToast("Redid schedule change");
   };
 
   const saveDecision = (
@@ -775,29 +801,7 @@ export default function App({
     if (!productionMode || !supabase) return;
     const { error } = await supabase.from("schedule_items").insert({
       id: item.id,
-      title: item.title,
-      description: item.description || null,
-      item_type: item.itemType,
-      visibility_scope: item.visibilityScope,
-      attendance_rule: item.attendanceRule,
-      starts_at: item.startsAt || null,
-      ends_at: item.endsAt || null,
-      time_precision: item.timePrecision,
-      location: item.location || null,
-      event_url: item.eventUrl || null,
-      registration_deadline: item.registrationDeadline || null,
-      cost_type: item.costType,
-      cost_note: item.costNote || null,
-      status: item.status,
-      booking_status: item.bookingStatus,
-      priority: item.priority,
-      fit: item.fit || null,
-      next_action: item.nextAction || null,
-      source_note: item.sourceNote || null,
-      meeting_category: item.meetingCategory || null,
-      meeting_status: item.meetingStatus || null,
-      contact_name: item.contactName || null,
-      meeting_note: item.meetingNote || null,
+      ...scheduleItemValues(item),
       created_by: profile.id,
     });
     if (error) {
@@ -815,6 +819,93 @@ export default function App({
         })),
       );
   };
+  function restoreHistoryItems(
+    from: ScheduleItem[],
+    to: ScheduleItem[],
+    label: "Undo" | "Redo",
+  ) {
+    const client = supabase;
+    if (!productionMode || !client) {
+      showToast(`${label} complete`);
+      return;
+    }
+    const restore = async () => {
+      const before = new Map(from.map((item) => [item.id, item]));
+      const after = new Map(to.map((item) => [item.id, item]));
+      const organisationIdsMatch = (left: ScheduleItem, right: ScheduleItem) =>
+        [...left.organisationIds].sort().join(",") ===
+        [...right.organisationIds].sort().join(",");
+      const responseForCurrentOrganisation = (item: ScheduleItem) =>
+        item.responses.find(
+          (response) => response.organisationId === profile.organisationId,
+        );
+
+      for (const [id, item] of after) {
+        const previous = before.get(id);
+        if (!previous) {
+          await persistNewItem(item);
+          continue;
+        }
+        if (JSON.stringify(scheduleItemValues(previous)) !== JSON.stringify(scheduleItemValues(item))) {
+          const { error } = await client
+            .from("schedule_items")
+            .update(scheduleItemValues(item))
+            .eq("id", id);
+          if (error) throw error;
+        }
+        if (!organisationIdsMatch(previous, item)) {
+          const { error: removeError } = await client
+            .from("schedule_item_organisations")
+            .delete()
+            .eq("schedule_item_id", id);
+          if (removeError) throw removeError;
+          if (item.visibilityScope === "selected_organisations" && item.organisationIds.length) {
+            const { error: insertError } = await client
+              .from("schedule_item_organisations")
+              .insert(
+                item.organisationIds.map((organisationId) => ({
+                  schedule_item_id: id,
+                  organisation_id: organisationId,
+                })),
+              );
+            if (insertError) throw insertError;
+          }
+        }
+        const oldResponse = responseForCurrentOrganisation(previous);
+        const newResponse = responseForCurrentOrganisation(item);
+        if (JSON.stringify(oldResponse) !== JSON.stringify(newResponse)) {
+          // Members cannot delete a response under the existing RLS policy.
+          // "undecided" is the faithful no-decision state and remains auditable.
+          const { error } = await client.from("event_responses").upsert(
+            {
+              schedule_item_id: id,
+              organisation_id: profile.organisationId,
+              decision: newResponse?.decision ?? "undecided",
+              note: newResponse?.note ?? null,
+              updated_by: profile.id,
+            },
+            { onConflict: "schedule_item_id,organisation_id" },
+          );
+          if (error) throw error;
+        }
+      }
+      for (const [id] of before) {
+        if (after.has(id)) continue;
+        const { error } = await client
+          .from("schedule_items")
+          .delete()
+          .eq("id", id);
+        if (error) throw error;
+      }
+    };
+    historySyncRef.current = historySyncRef.current
+      .then(restore, restore)
+      .then(() => showToast(`${label} complete`))
+      .catch((error: { message?: string }) => {
+        showToast(`${label} could not be saved: ${error.message ?? "try refreshing"}`);
+        window.dispatchEvent(new Event("programme-refresh"));
+      });
+  }
   const duplicateItem = (item: ScheduleItem) => {
     const copy = {
       ...item,
@@ -1009,8 +1100,8 @@ export default function App({
           page={page}
           scheduleMode={scheduleMode}
           setScheduleMode={setScheduleMode}
-          canUndo={!productionMode && undoStack.length > 0}
-          canRedo={!productionMode && redoStack.length > 0}
+          canUndo={undoStack.length > 0}
+          canRedo={redoStack.length > 0}
           onUndo={undoItems}
           onRedo={redoItems}
           setProfile={(next) => {
