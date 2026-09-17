@@ -302,6 +302,8 @@ const isConferenceOrEvent = (item: ScheduleItem) =>
   /\b(conference|summit|forum|expo|exhibition|event|workshop|hackathon|networking)\b/i.test(
     item.title,
   );
+const spreadsheetTypeFor = (item: ScheduleItem): ItemType =>
+  isConferenceOrEvent(item) ? "third_party" : item.itemType;
 const isPotentialBizMeet = (item: ScheduleItem) =>
   item.itemType === "business_meeting" &&
   !isGenericBusinessMeetingSlot(item) &&
@@ -1020,55 +1022,37 @@ export default function App({
     setSelectedId(undefined);
     showToast("Item deleted");
   };
-  const updateItem = (item: ScheduleItem) => {
+  const updateItem = async (item: ScheduleItem) => {
     setItemsWithHistory((current) =>
       current.map((entry) => (entry.id === item.id ? item : entry)),
     );
-    if (productionMode && supabase)
-      void (async () => {
-        const { error } = await supabase
-          .from("schedule_items")
-          .update({
-            title: item.title,
-            description: item.description || null,
-            item_type: item.itemType,
-            visibility_scope: item.visibilityScope,
-            attendance_rule: item.attendanceRule,
-            starts_at: item.startsAt || null,
-            ends_at: item.endsAt || null,
-            time_precision: item.timePrecision,
-            location: item.location || null,
-            event_url: item.eventUrl || null,
-            registration_deadline: item.registrationDeadline || null,
-            cost_type: item.costType,
-            cost_note: item.costNote || null,
-            status: item.status,
-            booking_status: item.bookingStatus,
-            priority: item.priority,
-            fit: item.fit || null,
-            next_action: item.nextAction || null,
-            source_note: item.sourceNote || null,
-            meeting_category: item.meetingCategory || null,
-            meeting_status: item.meetingStatus || null,
-            contact_name: item.contactName || null,
-            meeting_note: item.meetingNote || null,
-          })
-          .eq("id", item.id);
-        if (error) {
-          showToast(error.message);
+    if (productionMode && supabase) {
+      const { error } = await supabase
+        .from("schedule_items")
+        .update(scheduleItemValues(item))
+        .eq("id", item.id);
+      if (error) {
+        showToast(`Item could not be saved: ${error.message}`);
+        return;
+      }
+      const { error: targetDeleteError } = await supabase
+        .from("schedule_item_organisations")
+        .delete()
+        .eq("schedule_item_id", item.id);
+      if (targetDeleteError) {
+        showToast(`Audience could not be saved: ${targetDeleteError.message}`);
+        return;
+      }
+      if (item.visibilityScope === "selected_organisations" && item.organisationIds.length) {
+        const { error: targetInsertError } = await supabase
+          .from("schedule_item_organisations")
+          .insert(item.organisationIds.map((organisationId) => meetingTargetValues(item, organisationId)));
+        if (targetInsertError) {
+          showToast(`Audience could not be saved: ${targetInsertError.message}`);
           return;
         }
-        await supabase
-          .from("schedule_item_organisations")
-          .delete()
-          .eq("schedule_item_id", item.id);
-        if (item.visibilityScope === "selected_organisations")
-          await supabase.from("schedule_item_organisations").insert(
-            item.organisationIds.map((organisationId) =>
-              meetingTargetValues(item, organisationId),
-            ),
-          );
-      })();
+      }
+    }
     showToast("Item updated");
   };
   const updateMeetingTarget = (itemId: string, target: MeetingTarget) => {
@@ -2749,7 +2733,7 @@ function LegacySpreadsheetBoard({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {rows.map((item) => {
-              const meta = itemMeta[item.itemType];
+              const meta = itemMeta[spreadsheetTypeFor(item)];
               const conflict = availability.some((block) =>
                 overlaps(
                   block.startsAt,
@@ -2942,7 +2926,7 @@ function SpreadsheetBoard({
               const isAnchoredDate = itemDate
                 ? isSameDay(itemDate, anchorDate)
                 : false;
-              const meta = itemMeta[item.itemType];
+              const meta = itemMeta[spreadsheetTypeFor(item)];
               const decision = item.responses.find(
                 (response) =>
                   response.organisationId === profile.organisationId,
