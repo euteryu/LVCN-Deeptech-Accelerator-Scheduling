@@ -116,6 +116,8 @@ const uiText = {
     venueLocation: "Venue Location",
     toiletMap: "UK Toilet Map",
     externalLinks: "External event links",
+    hotelRecs: "Hotel Recs",
+    tutorial: "Tutorial",
     addCompanyWork: "Add company work",
     organisers: "Organisers",
     investorShowcase: "Investor Showcase",
@@ -136,7 +138,7 @@ const uiText = {
     confirmed: "Confirmed",
     decisionPending: "Decision pending",
     businessIntro:
-      "Potential meetings and introductions available during the programme. LVCN sees the full coordination view; participating companies see only the details needed to decide whether an opportunity is relevant.",
+      "Select an institution or person below to see further details and, where available, an external profile or event link.",
   },
   ko: {
     schedule: "일정",
@@ -174,12 +176,14 @@ const koreanUiText = {
   ...uiText.en,
   language: "\uD55C\uAD6D\uC5B4",
   schedule: "\uC77C\uC815",
-  businessMeetings: "Potential Biz Meets",
+  businessMeetings: "\uC7A0\uC7AC \uBE44\uC988\uB2C8\uC2A4 \uBBF8\uD305",
   cohortDecisions: "\uCF54\uD638\uD2B8 \uACB0\uC815",
   myDecisions: "\uB098\uC758 \uACB0\uC815",
   venueLocation: "\uD589\uC0AC \uC7A5\uC18C",
   toiletMap: "\uC601\uAD6D \uD654\uC7A5\uC2E4 \uC9C0\uB3C4",
   externalLinks: "\uC678\uBD80 \uD589\uC0AC \uB9C1\uD06C",
+  hotelRecs: "\uD638\uD154 \uCD94\uCC9C",
+  tutorial: "\uC0AC\uC6A9 \uC548\uB0B4",
   addCompanyWork: "\uD68C\uC0AC \uC5C5\uBB34 \uCD94\uAC00",
   organisers: "\uC8FC\uCD5C\uC790",
   investorShowcase: "\uD22C\uC790\uC790 \uC1FC\uCF00\uC774\uC2A4",
@@ -198,6 +202,8 @@ const koreanUiText = {
   key: "\uBC94\uB840",
   confirmed: "\uD655\uC815",
   decisionPending: "\uACB0\uC815 \uB300\uAE30",
+  businessIntro:
+    "\uC544\uB798\uC758 \uAE30\uAD00 \uB610\uB294 \uB2F4\uB2F9\uC790\uB97C \uC120\uD0DD\uD558\uBA74 \uC0C1\uC138 \uC815\uBCF4\uC640, \uC81C\uACF5\uB418\uB294 \uACBD\uC6B0 \uC678\uBD80 \uD504\uB85C\uD544 \uB610\uB294 \uD589\uC0AC \uB9C1\uD06C\uB97C \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
 } as const;
 
 const pretty = (value: string) =>
@@ -255,6 +261,111 @@ const isPotentialBizMeet = (item: ScheduleItem) =>
   !isConferenceOrEvent(item);
 const isSupersededDeepFusionMeeting = (item: ScheduleItem) =>
   item.title.trim().toLowerCase() === "md one";
+
+// Curated first-party profiles and official event pages for the imported
+// Deep Fusion AI and FUST Lab records. Deliberately do not invent a link for
+// an unmatched title: an empty value is clearer than an unreliable result.
+const officialExternalLinks: Record<string, string> = {
+  "MD One": "https://www.mdone.vc/",
+  "Mentor Meeting with Edward Ebbern (MD One)": "https://www.mdone.vc/",
+  "Seraphim Space": "https://seraphim.vc/",
+  "Octopus Ventures": "https://octopusventures.com/",
+  "Foresight Group": "https://www.foresightgroup.eu/",
+  "NATO Innovation Fund": "https://www.nif.fund/",
+  "In Motion Ventures (JLR CVC)": "https://www.inmotionventures.com/",
+  "Prosus Ventures": "https://www.prosusventures.com/",
+  "Molten Ventures": "https://www.moltenventures.com/",
+  "GB Ventures": "https://gb.vc/",
+  "IQ Capital": "https://iqcapital.vc/",
+  "Amadeus Capital Partners": "https://amadeuscapital.com/",
+  "DASA (Defence and Security Accelerator)": "https://www.gov.uk/government/organisations/defence-and-security-accelerator",
+  "BAE Systems (FalconWorks)": "https://www.baesystems.com/en-uk",
+  QinetiQ: "https://www.qinetiq.com/",
+  "Thales UK": "https://www.thalesgroup.com/en/countries-europe/uk",
+  "Leonardo UK": "https://uk.leonardo.com/en",
+  "Chess Dynamics (Elbit Systems UK)": "https://elbitsystems.com/",
+  "MBDA UK": "https://www.mbda-systems.com/country-uk",
+  "Saab UK": "https://www.saab.com/markets/united-kingdom",
+  "Rolls-Royce (Defence)": "https://www.rolls-royce.com/products-and-services/defence.aspx",
+  "Frazer-Nash Consultancy": "https://www.fnc.co.uk/",
+  NSSIF: "https://www.nssif.co.uk/",
+  Dstl: "https://www.gov.uk/government/organisations/defence-science-and-technology-laboratory",
+  "NATO DIANA": "https://www.diana.nato.int/",
+  "Cohort plc": "https://www.cohortplc.com/",
+  "Ahren Innovation Capital": "https://www.ahreninnovationcapital.com/",
+  "Paladin Capital Group": "https://www.paladincapgroup.com/",
+  "BGF Early Stage": "https://www.bgf.co.uk/",
+  "Cambridge Innovation Capital": "https://www.cic.vc/",
+  "Parkwalk Advisors": "https://parkwalkadvisors.com/",
+  "Atlantic Bridge": "https://www.abven.com/",
+  AlbionVC: "https://www.albion.vc/",
+  "Balderton Capital": "https://www.balderton.com/",
+  Atomico: "https://atomico.com/",
+  Lakestar: "https://www.lakestar.com/",
+  Northzone: "https://northzone.com/",
+  "EQT Ventures": "https://eqtventures.com/",
+  "Dawn Capital": "https://dawncapital.com/",
+  "Highland Europe": "https://www.highlandeurope.com/",
+  "M&G Catalyst": "https://www.mandg.com/",
+  "Schroders Capital": "https://www.schroders.com/en-gb/uk/institutional/capabilities/private-assets/",
+  "British Patient Capital": "https://www.britishpatientcapital.co.uk/",
+  "Future Fund: Breakthrough": "https://www.british-business-bank.co.uk/finance-options/debt-finance/future-fund-breakthrough",
+  "SoftBank Vision Fund": "https://group.softbank/en/ir/vision-fund",
+  "General Catalyst": "https://www.generalcatalyst.com/",
+  "Lux Capital": "https://www.luxcapital.com/",
+  DCVC: "https://www.dcvc.com/",
+  Eclipse: "https://eclipse.vc/",
+  "Playground Global": "https://playground.global/",
+  "E14 Fund": "https://e14fund.com/",
+  "Longwall Ventures": "https://longwallventures.com/",
+  "Northern Gritstone": "https://www.northern-gritstone.com/",
+  "MMC Ventures": "https://mmc.vc/",
+  "Crane Venture Partners": "https://www.crane.vc/",
+  "Entrepreneur First": "https://www.joinef.com/",
+  LocalGlobe: "https://localglobe.vc/",
+  Seedcamp: "https://seedcamp.com/",
+  "Hoxton Ventures": "https://www.hoxtonventures.com/",
+  "Notion Capital": "https://www.notion.vc/",
+  "Kindred Capital": "https://kindredcapital.vc/",
+  "Frontline Ventures": "https://frontline.vc/",
+  Beringea: "https://beringea.com/",
+  Speedinvest: "https://www.speedinvest.com/",
+  "OTB Ventures": "https://otb.vc/",
+  Zenzic: "https://zenzic.io/",
+  "HORIBA MIRA": "https://www.horiba-mira.com/",
+  "Millbrook Proving Ground": "https://www.utac.com/",
+  "Smart Mobility Living Lab": "https://smartmobilitylivinglab.com/",
+  Oxbotica: "https://www.oxbotica.com/",
+  Wayve: "https://wayve.ai/",
+  "Connected Places Catapult": "https://cp.catapult.org.uk/",
+  "Teledyne e2v": "https://www.teledyne-e2v.com/",
+  Plexal: "https://www.plexal.com/",
+  "AI Dinner Club": "https://aidinner.co.uk/",
+  "Sifted Summit - Day 1": "https://sifted.eu/summit",
+  "Sifted Summit - Day 2": "https://sifted.eu/summit",
+  "Deep Tech London kickoff with Singular and Seedcamp": "https://www.deeptech.london/",
+  "The Automotive Forum": "https://www.eumw.eu/conferences/forums/automotive-forum/",
+  "SMMT Regional Networking (North)": "https://www.smmt.co.uk/events/",
+  "The Defence Forum": "https://www.eumw.eu/conferences/forums/defence-forum/",
+  "EuRAD Conference": "https://www.eumw.eu/conference/the-european-radar-conference-eurad/",
+  "Trusted Research & Secure Innovation Summit": "https://www.techuk.org/what-we-deliver/flagship-and-sponsored-events/trusted-research-and-secure-innovation-summit.html",
+  "Founder Pitch Challenge 2026": "https://www.eventbrite.co.uk/e/founder-pitch-challenge-2026-london-tide-hq-compete-for-a-share-of-5k-tickets-1996432529438",
+  "Birmingham Tech Week - International Networking Reception": "https://birminghamtechweek.com/",
+  "Birmingham Tech Week - Global Village": "https://birminghamtechweek.com/",
+  "Birmingham Tech Week - Scale Up Games Final": "https://birminghamtechweek.com/",
+  "Birmingham Tech Week - Investment Dinner": "https://birminghamtechweek.com/",
+  "Birmingham Tech Week - ScaleUp Summit": "https://birminghamtechweek.com/",
+  "Encode London Hackathon and Conference": "https://luma.com/encode-london-2026",
+  "IWA World Water Congress & Exhibition": "https://worldwatercongress.org/",
+  "IWA World Water Congress or Cranfield Water Alumni Reception": "https://worldwatercongress.org/",
+  "SUEZ Satellite User Forum — Smart Water & Wastewater": "https://www.suez.com/en",
+  "Women on Water Conference & Reception": "https://www.britishwater.co.uk/page/events",
+};
+
+const officialExternalLinkFor = (item: ScheduleItem) => {
+  const normalisedTitle = item.title.replaceAll("â€”", "—").trim();
+  return item.eventUrl || officialExternalLinks[normalisedTitle];
+};
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -910,7 +1021,7 @@ export default function App({
           ) : page === "location" ? (
             <LocationPage />
           ) : page === "hotel-recs" ? (
-            <HotelRecommendationsPage />
+            <HotelRecommendationsPage language={language} />
           ) : page === "toilets" ? (
             <ToiletMapPage />
           ) : page === "external-events" ? (
@@ -1015,6 +1126,7 @@ export default function App({
             <DecisionsPage
               items={visibleItems}
               profile={profile}
+              language={language}
               onOpenSchedule={() => {
                 setPage("calendar");
                 setScheduleMode("spreadsheet");
@@ -1170,7 +1282,38 @@ function Sidebar({
   onSectionVisibilityChange: (sectionId: string, visible: boolean) => void;
 }) {
   const copy = language === "ko" ? koreanUiText : uiText.en;
+  const businessCopy =
+    language === "ko"
+      ? {
+          breadcrumb: "일정 / 잠재 비즈니스 미팅",
+          institution: "기관",
+          category: "분류",
+          decision: "결정",
+          status: "상태",
+          person: "담당자",
+          time: "시간",
+          note: "메모",
+          pending: "검토 대기",
+          confirm: "확인",
+          reject: "거절",
+          noMeetings: "현재 표시할 잠재 비즈니스 미팅이 없습니다.",
+        }
+      : {
+          breadcrumb: "Schedule / Business meetings",
+          institution: "Institution",
+          category: "Category",
+          decision: "Decision",
+          status: "Status",
+          person: "Person",
+          time: "Time",
+          note: "Note",
+          pending: "Pending",
+          confirm: "Confirm",
+          reject: "Reject",
+          noMeetings: "No business meetings are currently visible.",
+        };
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  void businessCopy;
   const nav = [
     { id: "calendar", label: copy.schedule, icon: CalendarDays },
     { id: "business-meetings", label: copy.businessMeetings, icon: Building2 },
@@ -1181,7 +1324,7 @@ function Sidebar({
       icon: LayoutList,
     },
     { id: "location", label: copy.venueLocation, icon: MapPin },
-    { id: "hotel-recs", label: "Hotel Recs", icon: Building2 },
+    { id: "hotel-recs", label: copy.hotelRecs, icon: Building2 },
     { id: "toilets", label: copy.toiletMap, icon: Toilet },
     { id: "external-events", label: copy.externalLinks, icon: Link2 },
   ];
@@ -1355,14 +1498,14 @@ function Sidebar({
         <button
           type="button"
           onClick={() => setTutorialOpen(true)}
-          title={collapsed ? "Tutorial" : undefined}
+          title={collapsed ? copy.tutorial : undefined}
           className={cn(
             "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-950",
             collapsed && "lg:justify-center lg:px-2",
           )}
         >
           <CircleHelp className="size-[18px] shrink-0" />
-          <span className={cn(collapsed && "lg:hidden")}>Tutorial</span>
+          <span className={cn(collapsed && "lg:hidden")}>{copy.tutorial}</span>
         </button>
         <button
           type="button"
@@ -1379,7 +1522,7 @@ function Sidebar({
             {language === "en" ? "한국어" : "English"}
           </span>
         </button>
-        <TutorialDialog open={tutorialOpen} setOpen={setTutorialOpen} />
+        <TutorialDialog open={tutorialOpen} setOpen={setTutorialOpen} language={language} />
       </aside>
     </Fragment>
   );
@@ -1388,9 +1531,11 @@ function Sidebar({
 function TutorialDialog({
   open,
   setOpen,
+  language,
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
+  language: Language;
 }) {
   const [selectedStep, setSelectedStep] = useState<number>();
   const tutorialImages = ["df1.png", "df2.png", "df3.png", "df5.png"];
@@ -1411,10 +1556,10 @@ function TutorialDialog({
                 onClick={() => setSelectedStep(undefined)}
                 className="text-sm font-semibold text-indigo-700 hover:text-indigo-900"
               >
-                ← All tutorials
+                ← {language === "ko" ? "전체 안내" : "All tutorials"}
               </button>
               <p className="text-xs font-bold text-slate-500">
-                Tutorial {selectedStep} of {tutorialImages.length}
+                {language === "ko" ? `안내 ${selectedStep} / ${tutorialImages.length}` : `Tutorial ${selectedStep} of ${tutorialImages.length}`}
               </p>
             </div>
             <img
@@ -1429,7 +1574,7 @@ function TutorialDialog({
                 disabled={selectedStep === 1}
                 onClick={() => setSelectedStep((step) => (step ? step - 1 : step))}
               >
-                Previous
+                {language === "ko" ? "이전" : "Previous"}
               </Button>
               <Button
                 type="button"
@@ -1437,16 +1582,17 @@ function TutorialDialog({
                 disabled={selectedStep === tutorialImages.length}
                 onClick={() => setSelectedStep((step) => (step ? step + 1 : step))}
               >
-                Next
+                {language === "ko" ? "다음" : "Next"}
               </Button>
             </div>
           </>
         ) : (
           <>
-            <DialogTitle>How to use the programme board</DialogTitle>
+            <DialogTitle>{language === "ko" ? "프로그램 보드 사용 방법" : "How to use the programme board"}</DialogTitle>
             <DialogDescription>
-              Four quick ways to interact with the app. Select an image to
-              focus and zoom in.
+              {language === "ko"
+                ? "앱을 사용하는 네 가지 방법입니다. 이미지를 선택하면 크게 볼 수 있습니다."
+                : "Four quick ways to interact with the app. Select an image to focus and zoom in."}
             </DialogDescription>
             <div className="mt-5 grid gap-5 sm:grid-cols-2">
               {tutorialImages.map((image, index) => {
@@ -1465,7 +1611,7 @@ function TutorialDialog({
                     className="w-full bg-white transition duration-200 group-hover:scale-[1.02]"
                   />
                   <span className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-600">
-                    Tutorial {step} of {tutorialImages.length}
+                    {language === "ko" ? `안내 ${step} / ${tutorialImages.length}` : `Tutorial ${step} of ${tutorialImages.length}`}
                     <Maximize2 className="size-3.5" />
                   </span>
                 </button>
@@ -1621,16 +1767,18 @@ const hotelRecommendations: Record<
   },
 };
 
-function HotelRecommendationsPage() {
+function HotelRecommendationsPage({ language }: { language: Language }) {
   const locations = Object.keys(hotelRecommendations) as Array<keyof typeof hotelRecommendations>;
   const [location, setLocation] = useState<keyof typeof hotelRecommendations>("Hammersmith");
   const guide = hotelRecommendations[location];
   return (
     <div>
-      <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">Travel planning</p>
-      <h1 className="mt-1 text-3xl font-semibold tracking-tight">Hotel Recs</h1>
+      <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">{language === "ko" ? "여행 계획" : "Travel planning"}</p>
+      <h1 className="mt-1 text-3xl font-semibold tracking-tight">{language === "ko" ? "호텔 추천" : "Hotel Recs"}</h1>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-        A small shortlist for the locations the cohort may visit. Typical rates are indicative per room, per night; check the booking link for your dates.
+        {language === "ko"
+          ? "방문 가능성이 있는 지역별 소규모 추천 목록입니다. 평균 요금은 객실 1개당 1박 기준의 참고 가격이므로, 실제 날짜의 요금은 예약 링크에서 확인하세요."
+          : "A small shortlist for the locations the cohort may visit. Typical rates are indicative per room, per night; check the booking link for your dates."}
       </p>
       <div className="mt-6 flex flex-wrap gap-2">
         {locations.map((entry) => (
@@ -1649,13 +1797,13 @@ function HotelRecommendationsPage() {
             <article key={hotel.name} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,.03)]">
               <div className="flex items-start justify-between gap-3">
                 <h2 className="text-lg font-semibold text-slate-950">{hotel.name}</h2>
-                <span className="shrink-0 text-sm font-bold text-emerald-700">{hotel.typicalNightlyRate}<span className="block text-[10px] font-medium text-slate-500">/ night</span></span>
+                <span className="shrink-0 text-sm font-bold text-emerald-700">{hotel.typicalNightlyRate}<span className="block text-[10px] font-medium text-slate-500">{language === "ko" ? "/ 1박" : "/ night"}</span></span>
               </div>
               <p className="mt-2 flex gap-1.5 text-sm text-slate-600"><MapPin className="mt-0.5 size-4 shrink-0 text-slate-400" />{hotel.address}</p>
               <p className="mt-3 text-sm leading-6 text-slate-600">{hotel.note}</p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <a href={hotel.bookingUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg bg-[#162c5b] px-3 py-2 text-xs font-bold text-white hover:bg-[#223d78]">Check rooms <ExternalLink className="size-3.5" /></a>
-                <a href={directionsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Directions <MapPin className="size-3.5" /></a>
+                <a href={hotel.bookingUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg bg-[#162c5b] px-3 py-2 text-xs font-bold text-white hover:bg-[#223d78]">{language === "ko" ? "객실 확인" : "Check rooms"} <ExternalLink className="size-3.5" /></a>
+                <a href={directionsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">{language === "ko" ? "길찾기" : "Directions"} <MapPin className="size-3.5" /></a>
               </div>
             </article>
           );
@@ -2530,7 +2678,7 @@ function SpreadsheetBoard({
                 Decision
               </th>
               <th className="min-w-[260px] border-b border-emerald-900/30 px-3 py-2">
-                Notes (e.g. Costs; Deadlines)
+                Price (if applicable)
               </th>
               <th className="min-w-[250px] border-b border-emerald-900/30 px-3 py-2">
                 Location
@@ -2560,7 +2708,7 @@ function SpreadsheetBoard({
               const isPendingDecision =
                 !decision ||
                 ["undecided", "interested", "acknowledged"].includes(decision);
-              const conflict = availability.some((block) =>
+              const availabilityConflict = availability.some((block) =>
                 overlaps(
                   block.startsAt,
                   block.endsAt,
@@ -2568,14 +2716,44 @@ function SpreadsheetBoard({
                   item.endsAt,
                 ),
               );
-              const notes = [
-                item.costNote,
-                item.nextAction,
-                bookingLabel(item.bookingStatus),
-                conflict && "Availability conflict",
-              ]
-                .filter(Boolean)
-                .join(" · ");
+              const alternativeChoiceConflict = Boolean(
+                item.conflictGroupId &&
+                  ["going", "interested"].includes(decision ?? "") &&
+                  items.some(
+                    (other) =>
+                      other.id !== item.id &&
+                      other.conflictGroupId === item.conflictGroupId &&
+                      other.responses.some(
+                        (response) =>
+                          response.organisationId === profile.organisationId &&
+                          ["going", "interested"].includes(response.decision),
+                      ),
+                  ),
+              );
+              const conflict = availabilityConflict || alternativeChoiceConflict;
+              const scheduleOverlapItems = items.filter(
+                (other) =>
+                  other.id !== item.id &&
+                  other.itemType !== "company_work" &&
+                  other.startsAt &&
+                  !other.responses.some(
+                    (response) =>
+                      response.organisationId === profile.organisationId &&
+                      response.decision === "pass",
+                  ) &&
+                  overlaps(
+                    item.startsAt!,
+                    item.endsAt ?? new Date(new Date(item.startsAt!).getTime() + 3600000).toISOString(),
+                    other.startsAt!,
+                    other.endsAt,
+                  ),
+              );
+              const hasScheduleOverlap = scheduleOverlapItems.length > 0;
+              const priceNote =
+                item.costNote &&
+                /(?:[£$€]\s*\d|\d+\s*(?:gbp|usd|eur))/i.test(item.costNote)
+                  ? item.costNote
+                  : "";
               return (
                 <Fragment key={item.id}>
                   {showDateBand && (
@@ -2612,13 +2790,35 @@ function SpreadsheetBoard({
                       if (event.key === "Enter" || event.key === " ")
                         onSelect(item.id);
                     }}
-                    className="cursor-pointer odd:bg-white even:bg-slate-50/70 hover:bg-indigo-50/50 focus:bg-indigo-50/60 focus:outline-none"
+                    className={cn(
+                      "cursor-pointer odd:bg-white even:bg-slate-50/70 hover:bg-indigo-50/50 focus:bg-indigo-50/60 focus:outline-none",
+                      conflict
+                        ? "bg-rose-50/80 hover:bg-rose-100/80"
+                        : hasScheduleOverlap && "bg-amber-50/80 hover:bg-amber-100/80",
+                    )}
                   >
                     <td className="hidden">
                       {item.timePrecision === "all_day" ? "●" : ""}
                     </td>
                     <td className="px-4 py-2 align-top font-semibold text-slate-900">
-                      {item.title}
+                      <span className="flex items-center gap-2">
+                        {item.title}
+                        {conflict && (
+                          <span className="inline-flex animate-pulse items-center gap-1 rounded-md bg-rose-100 px-2 py-1 text-[10px] font-bold text-rose-900 shadow-[0_0_0_3px_rgba(251,113,133,.24),0_0_24px_rgba(244,63,94,.62)] ring-2 ring-rose-300 ring-offset-1">
+                            <AlertTriangle className="size-3" />
+                            Clash
+                          </span>
+                        )}
+                        {!conflict && hasScheduleOverlap && (
+                          <span
+                            title="Times overlap. This may still be manageable; review both events and choose the appropriate decisions."
+                            className="inline-flex animate-pulse items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-900 shadow-[0_0_0_3px_rgba(251,191,36,.22),0_0_20px_rgba(245,158,11,.48)] ring-2 ring-amber-300 ring-offset-1"
+                          >
+                            <AlertTriangle className="size-3" />
+                            Time overlap
+                          </span>
+                        )}
+                      </span>
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 align-top text-xs font-semibold text-slate-700">
                       {item.startsAt && item.timePrecision !== "all_day"
@@ -2684,7 +2884,7 @@ function SpreadsheetBoard({
                       )}
                     </td>
                     <td className="px-3 py-2 align-top text-xs text-slate-600">
-                      {notes || "—"}
+                      {priceNote}
                     </td>
                     <td className="px-3 py-2 align-top text-xs text-slate-600">
                       {item.location || "London / TBC"}
@@ -2702,7 +2902,7 @@ function SpreadsheetBoard({
         </div>
       )}
       {pendingDecision && (
-        <div className="fixed bottom-5 left-1/2 z-[80] flex -translate-x-1/2 items-center gap-3 rounded-xl bg-slate-950 px-4 py-3 text-sm text-white shadow-2xl">
+        <div className="fixed left-1/2 top-24 z-[80] flex -translate-x-1/2 items-center gap-3 rounded-xl bg-slate-950 px-4 py-3 text-sm text-white shadow-2xl">
           <span>Choose a decision for “{pendingDecision.item.title}”</span>
           <button
             type="button"
@@ -3011,6 +3211,23 @@ function HourlyBoard({
   const unknown = items.filter(
     (item) => !item.startsAt || item.timePrecision === "all_day",
   );
+  const scheduleOverlapsFor = (item: ScheduleItem) =>
+    timed.filter(
+      (other) =>
+        other.id !== item.id &&
+        other.itemType !== "company_work" &&
+        !other.responses.some(
+          (response) =>
+            response.organisationId === profile.organisationId &&
+            response.decision === "pass",
+        ) &&
+        overlaps(
+          item.startsAt!,
+          item.endsAt ?? new Date(new Date(item.startsAt!).getTime() + 3600000).toISOString(),
+          other.startsAt!,
+          other.endsAt,
+        ),
+    );
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.03)]">
       <div className="min-w-0">
@@ -3138,6 +3355,7 @@ function HourlyBoard({
                   isAdmin={isAdmin}
                   profile={profile}
                   availability={availability}
+                  scheduleOverlaps={scheduleOverlapsFor(item)}
                   onClick={() => onSelect(item.id)}
                   style={style}
                 />
@@ -3175,6 +3393,7 @@ function TimedEvent({
   isAdmin,
   profile,
   availability,
+  scheduleOverlaps,
   onClick,
   style,
 }: {
@@ -3182,6 +3401,7 @@ function TimedEvent({
   isAdmin: boolean;
   profile: Profile;
   availability: AvailabilityBlock[];
+  scheduleOverlaps: ScheduleItem[];
   onClick: () => void;
   style: { top: number; height: number; left: string; width: string };
 }) {
@@ -3194,12 +3414,16 @@ function TimedEvent({
       (isAdmin || block.organisationId === profile.organisationId) &&
       overlaps(block.startsAt, block.endsAt, item.startsAt, item.endsAt),
   );
+  const hasScheduleOverlap = scheduleOverlaps.length > 0;
   return (
     <button
       onClick={onClick}
       className={cn(
         "absolute z-20 overflow-hidden rounded-md border px-2 py-1 text-left shadow-sm transition hover:z-30 hover:shadow-md",
         calendarState(item, response?.decision),
+        conflict
+          ? "animate-pulse border-rose-400 bg-rose-100/90 shadow-[0_0_0_3px_rgba(251,113,133,.24),0_0_24px_rgba(244,63,94,.55)]"
+          : hasScheduleOverlap && "animate-pulse border-amber-400 bg-amber-100/90 shadow-[0_0_0_3px_rgba(251,191,36,.22),0_0_20px_rgba(245,158,11,.45)]",
       )}
       style={style}
     >
@@ -3210,6 +3434,9 @@ function TimedEvent({
         </p>
         {conflict && (
           <AlertTriangle className="ml-auto size-3 shrink-0 text-rose-600" />
+        )}
+        {!conflict && hasScheduleOverlap && (
+          <span title="Time overlap — review both events; you may still be able to attend parts of each." className="ml-auto text-[8px] font-black uppercase tracking-wide text-amber-900">Overlap</span>
         )}
       </div>
       <p className="truncate text-[9px] text-slate-600">
@@ -3398,6 +3625,36 @@ function BusinessMeetingsPage({
   language: Language;
 }) {
   const copy = language === "ko" ? koreanUiText : uiText.en;
+  const businessCopy =
+    language === "ko"
+      ? {
+          breadcrumb: "일정 / 잠재 비즈니스 미팅",
+          institution: "기관",
+          category: "분류",
+          decision: "결정",
+          status: "상태",
+          person: "담당자",
+          time: "시간",
+          note: "메모",
+          pending: "검토 대기",
+          confirm: "확인",
+          reject: "거절",
+          noMeetings: "현재 표시할 잠재 비즈니스 미팅이 없습니다.",
+        }
+      : {
+          breadcrumb: "Schedule / Business meetings",
+          institution: "Institution",
+          category: "Category",
+          decision: "Decision",
+          status: "Status",
+          person: "Person",
+          time: "Time",
+          note: "Note",
+          pending: "Pending",
+          confirm: "Confirm",
+          reject: "Reject",
+          noMeetings: "No business meetings are currently visible.",
+        };
   const [adminSearch, setAdminSearch] = useState("");
   const [pendingDecision, setPendingDecision] = useState<{
     item: ScheduleItem;
@@ -3460,7 +3717,7 @@ function BusinessMeetingsPage({
       <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">
         {language === "ko"
           ? "일정 / 비즈니스 미팅"
-          : "Schedule / Business meetings"}
+          : businessCopy.breadcrumb}
       </p>
       <h1 className="mt-1 text-3xl font-semibold tracking-tight">
         {copy.businessMeetings}
@@ -3528,13 +3785,13 @@ function BusinessMeetingsPage({
           <table className="min-w-[1080px] w-full border-collapse text-left text-sm">
             <thead className="bg-[#286c58] text-[11px] font-bold text-white">
               <tr>
-                <th className="px-4 py-2.5">Institution</th>
-                <th className="px-4 py-2.5">Category</th>
-                <th className="px-4 py-2.5">Decision</th>
-                <th className="px-4 py-2.5">Status</th>
-                {isAdmin && <th className="px-4 py-2.5">Person</th>}
-                <th className="px-4 py-2.5">Time</th>
-                <th className="px-4 py-2.5">Note</th>
+                <th className="px-4 py-2.5">{businessCopy.institution}</th>
+                <th className="px-4 py-2.5">{businessCopy.category}</th>
+                <th className="px-4 py-2.5">{businessCopy.decision}</th>
+                <th className="px-4 py-2.5">{businessCopy.status}</th>
+                {isAdmin && <th className="px-4 py-2.5">{businessCopy.person}</th>}
+                <th className="px-4 py-2.5">{businessCopy.time}</th>
+                <th className="px-4 py-2.5">{businessCopy.note}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -3600,10 +3857,10 @@ function BusinessMeetingsPage({
                           )}
                         >
                           {isPendingDecision
-                            ? "Pending"
+                            ? businessCopy.pending
                             : decision === "going"
-                              ? "Confirm"
-                              : "Reject"}
+                              ? businessCopy.confirm
+                              : businessCopy.reject}
                         </button>
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
@@ -3642,12 +3899,12 @@ function BusinessMeetingsPage({
         </div>
         {!items.length && (
           <p className="p-8 text-center text-sm text-slate-500">
-            No business meetings are currently visible.
+            {businessCopy.noMeetings}
           </p>
         )}
       </div>
       {pendingDecision && (
-        <div className="fixed bottom-5 left-1/2 z-[80] flex -translate-x-1/2 items-center gap-3 rounded-xl bg-slate-950 px-4 py-3 text-sm text-white shadow-2xl">
+        <div className="fixed left-1/2 top-24 z-[80] flex -translate-x-1/2 items-center gap-3 rounded-xl bg-slate-950 px-4 py-3 text-sm text-white shadow-2xl">
           <span>Choose a decision for “{pendingDecision.item.title}”</span>
           <button type="button" onClick={() => commitDecision("going")} className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-400">Confirm</button>
           <button type="button" onClick={() => commitDecision("pass")} className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-400">Reject</button>
@@ -3662,11 +3919,13 @@ function BusinessMeetingsPage({
 function DecisionsPage({
   items,
   profile,
+  language,
   onOpenSchedule,
   onOpenBusinessMeetings,
 }: {
   items: ScheduleItem[];
   profile: Profile;
+  language: Language;
   onOpenSchedule: () => void;
   onOpenBusinessMeetings: () => void;
 }) {
@@ -3695,36 +3954,36 @@ function DecisionsPage({
   );
   const pendingBreakdown = [
     {
-      title: "Potential Biz Meets",
-      description: "Review named VC, investor and Defence & Security introductions.",
+      title: language === "ko" ? "잠재 비즈니스 미팅" : "Potential Biz Meets",
+      description: language === "ko" ? "VC, 투자자 및 국방·안보 분야의 소개 미팅을 검토하세요." : "Review named VC, investor and Defence & Security introductions.",
       items: pendingItems.filter(isPotentialBizMeet),
-      action: "Open Potential Biz Meets",
+      action: language === "ko" ? "잠재 비즈니스 미팅 열기" : "Open Potential Biz Meets",
       onClick: onOpenBusinessMeetings,
     },
     {
-      title: "Conferences & external opportunities",
-      description: "Review optional conferences, forums and third-party events.",
+      title: language === "ko" ? "컨퍼런스 및 외부 기회" : "Conferences & external opportunities",
+      description: language === "ko" ? "선택 가능한 컨퍼런스, 포럼 및 외부 행사를 검토하세요." : "Review optional conferences, forums and third-party events.",
       items: pendingItems.filter(
         (item) => item.itemType === "third_party" || isConferenceOrEvent(item),
       ),
-      action: "Open Schedule",
+      action: language === "ko" ? "일정 열기" : "Open Schedule",
       onClick: onOpenSchedule,
     },
     {
-      title: "Programme attendance",
-      description: "Confirm compulsory or recommended LVCN programme sessions.",
+      title: language === "ko" ? "프로그램 참석" : "Programme attendance",
+      description: language === "ko" ? "필수 또는 권장 LVCN 프로그램 세션 참석 여부를 확인하세요." : "Confirm compulsory or recommended LVCN programme sessions.",
       items: pendingItems.filter((item) => item.itemType === "lvnc_core"),
-      action: "Open Schedule",
+      action: language === "ko" ? "일정 열기" : "Open Schedule",
       onClick: onOpenSchedule,
     },
   ].filter((group) => group.items.length > 0);
   return (
     <div>
       <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">
-        Decision centre
+        {language === "ko" ? "결정 센터" : "Decision centre"}
       </p>
       <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-        {profile.role === "lvnc_admin" ? "Cohort decisions" : "My decisions"}
+        {profile.role === "lvnc_admin" ? (language === "ko" ? "코호트 결정" : "Cohort decisions") : (language === "ko" ? "내 결정" : "My decisions")}
       </h1>
       {profile.role === "lvnc_admin" ? (
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
@@ -3733,38 +3992,38 @@ function DecisionsPage({
       ) : (
         <>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-            This is your read-only decision summary across programme events,
-            opportunities and Potential Biz Meets.
+            {language === "ko" ? "프로그램 행사, 외부 기회 및 잠재 비즈니스 미팅 전체에 대한 읽기 전용 결정 요약입니다." : "This is your read-only decision summary across programme events, opportunities and Potential Biz Meets."}
           </p>
           <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
             <div>
               <p className="text-3xl font-bold text-amber-900">{pendingCount}</p>
               <p className="text-sm font-semibold text-amber-900">
-                {pendingCount === 1 ? "decision needs your attention" : "decisions need your attention"}
+                {language === "ko" ? `${pendingCount}개 결정에 확인이 필요합니다` : pendingCount === 1 ? "decision needs your attention" : "decisions need your attention"}
               </p>
             </div>
-            <div className="mt-4 space-y-2">
+            <ul className="mt-4 space-y-2 border-t border-amber-200 pt-3">
               {pendingBreakdown.map((group) => (
-                <div
+                <li
                   key={group.title}
-                  className="flex flex-col gap-2 rounded-xl border border-amber-200/80 bg-white/70 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-1.5 text-sm text-amber-950 sm:flex-row sm:items-start sm:justify-between sm:gap-6"
                 >
-                  <p className="text-sm leading-5 text-amber-950">
-                    <span className="font-bold">{group.items.length} · {group.title}</span>
-                    <span className="block text-xs text-amber-800">{group.description}</span>
+                  <p className="leading-5">
+                    <span className="mr-2 text-amber-600">•</span>
+                    <span className="font-bold">{group.items.length} {group.title}</span>
+                    <span className="block pl-4 text-xs text-amber-800">{group.description}</span>
                   </p>
-                  <Button type="button" variant="ghost" onClick={group.onClick}>
+                  <button type="button" onClick={group.onClick} className="ml-4 inline-flex shrink-0 items-center gap-1 text-xs font-bold text-indigo-700 hover:text-indigo-900 hover:underline">
                     {group.action}
                     <ArrowRight className="size-4" />
-                  </Button>
-                </div>
+                  </button>
+                </li>
               ))}
               {pendingBreakdown.length === 0 && (
-                <p className="text-xs text-amber-800">No decisions are currently awaiting review.</p>
+                <li className="text-xs text-amber-800">{language === "ko" ? "현재 검토할 결정이 없습니다." : "No decisions are currently awaiting review."}</li>
               )}
-            </div>
+            </ul>
             <p className="mt-4 text-xs leading-5 text-amber-800">
-              Use the Company work control in the sidebar only to block personal time; it is separate from event and meeting decisions.
+              {language === "ko" ? "사이드바의 회사 업무 기능은 개인 시간을 차단할 때만 사용하세요. 행사 및 미팅 결정과는 별개입니다." : "Use the Company work control in the sidebar only to block personal time; it is separate from event and meeting decisions."}
             </p>
           </div>
         </>
@@ -3847,6 +4106,11 @@ function ItemDrawer({
   const conflicts = availability.filter((block) =>
     overlaps(block.startsAt, block.endsAt, item.startsAt, item.endsAt),
   );
+  const externalLink = officialExternalLinkFor(item);
+  const externalLinkLabel =
+    item.itemType === "business_meeting"
+      ? "Open organisation profile"
+      : "Open official event page";
   const decisions: Decision[] = ["going", "undecided", "pass"];
   return (
     <>
@@ -3945,15 +4209,15 @@ function ItemDrawer({
                 </span>
               </p>
             )}
-            {item.eventUrl && (
+            {externalLink && (
               <a
-                href={item.eventUrl}
+                href={externalLink}
                 target="_blank"
                 rel="noreferrer"
                 className="flex gap-3 font-semibold text-indigo-700 hover:underline"
               >
                 <Link2 className="mt-0.5 size-4 shrink-0" />
-                Open event link <ExternalLink className="size-3" />
+                {externalLinkLabel} <ExternalLink className="size-3" />
               </a>
             )}
           </div>
