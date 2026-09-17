@@ -996,7 +996,10 @@ export default function App({
             <DecisionsPage
               items={visibleItems}
               profile={profile}
-              onSelect={setSelectedId}
+              onOpenSchedule={() => {
+                setPage("calendar");
+                setScheduleMode("spreadsheet");
+              }}
             />
           )}
         </main>
@@ -3482,63 +3485,29 @@ function BusinessMeetingsPage({
 function DecisionsPage({
   items,
   profile,
-  onSelect,
+  onOpenSchedule,
 }: {
   items: ScheduleItem[];
   profile: Profile;
-  onSelect: (id: string) => void;
+  onOpenSchedule: () => void;
 }) {
   const responseFor = (item: ScheduleItem) =>
     item.responses.find(
       (response) => response.organisationId === profile.organisationId,
     )?.decision ?? "undecided";
-  const groups =
-    profile.role === "lvnc_admin"
-      ? [
-          {
-            title: "Needs a cohort response",
-            items: items.filter((i) =>
-              i.responses.some((r) => r.decision === "undecided"),
-            ),
-          },
-          {
-            title: "Booking or action required",
-            items: items.filter(
-              (i) =>
-                i.bookingStatus !== "not_required" &&
-                i.bookingStatus !== "verified",
-            ),
-          },
-        ]
-      : [
-          {
-            title: "Needs my decision",
-            items: items.filter((i) => responseFor(i) === "undecided"),
-          },
-          {
-            title: "Going",
-            items: items.filter((i) =>
-              ["going", "acknowledged"].includes(responseFor(i)),
-            ),
-          },
-          {
-            title: "Interested",
-            items: items.filter((i) => responseFor(i) === "interested"),
-          },
-          {
-            title: "Events We Rejected",
-            items: items.filter((i) => responseFor(i) === "pass"),
-          },
-          {
-            title: "Booking / action required",
-            items: items.filter(
-              (i) =>
-                ["going", "interested"].includes(responseFor(i)) &&
-                i.bookingStatus !== "not_required" &&
-                i.bookingStatus !== "verified",
-            ),
-          },
-        ];
+  const actionableItems = items.filter((item) => item.itemType !== "company_work");
+  const groups = profile.role === "lvnc_admin"
+    ? [
+        { title: "Needs a cohort response", items: items.filter((item) => item.responses.some((response) => response.decision === "undecided")) },
+        { title: "Booking or action required", items: items.filter((item) => item.bookingStatus !== "not_required" && item.bookingStatus !== "verified") },
+      ]
+    : [
+        { title: "Confirmed", items: actionableItems.filter((item) => ["going", "acknowledged"].includes(responseFor(item))) },
+        { title: "Rejected", items: actionableItems.filter((item) => responseFor(item) === "pass") },
+      ];
+  const pendingCount = actionableItems.filter((item) =>
+    ["undecided", "interested"].includes(responseFor(item)),
+  ).length;
   return (
     <div>
       <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">
@@ -3547,9 +3516,34 @@ function DecisionsPage({
       <h1 className="mt-1 text-3xl font-semibold tracking-tight">
         {profile.role === "lvnc_admin" ? "Cohort decisions" : "My decisions"}
       </h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-        A focused view of choices and follow-up, without the calendar noise.
-      </p>
+      {profile.role === "lvnc_admin" ? (
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+          A focused view of choices and follow-up, without the calendar noise.
+        </p>
+      ) : (
+        <>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            This is your read-only decision summary across programme events,
+            opportunities and Potential Biz Meets.
+          </p>
+          <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-3xl font-bold text-amber-900">{pendingCount}</p>
+              <p className="text-sm font-semibold text-amber-900">
+                {pendingCount === 1 ? "decision needs your attention" : "decisions need your attention"}
+              </p>
+              <p className="mt-1 max-w-xl text-xs leading-5 text-amber-800">
+                Choose Confirm or Reject in Schedule → Spreadsheet. Use the
+                Company work control in the sidebar to block personal time.
+              </p>
+            </div>
+            <Button type="button" variant="indigo" onClick={onOpenSchedule}>
+              <CalendarDays className="size-4" />
+              Open schedule
+            </Button>
+          </div>
+        </>
+      )}
       <div className="mt-7 grid gap-5 lg:grid-cols-2">
         {groups.map((group) => (
           <section
@@ -3561,11 +3555,10 @@ function DecisionsPage({
               <Badge>{group.items.length}</Badge>
             </div>
             <div className="space-y-2">
-              {group.items.slice(0, 6).map((item) => (
-                <button
+              {group.items.map((item) => (
+                <div
                   key={item.id}
-                  onClick={() => onSelect(item.id)}
-                  className="flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left hover:border-slate-200 hover:bg-slate-50"
+                  className="flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left"
                 >
                   <span
                     className={cn(
@@ -3581,8 +3574,7 @@ function DecisionsPage({
                       {dateLabel(item)}
                     </p>
                   </div>
-                  <ArrowRight className="size-4 text-slate-400" />
-                </button>
+                </div>
               ))}
               {group.items.length === 0 && (
                 <p className="rounded-xl bg-slate-50 px-3 py-6 text-center text-sm text-slate-400">
