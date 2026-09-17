@@ -318,6 +318,7 @@ export default function App({
     | "decisions"
     | "organisers"
     | "location"
+    | "hotel-recs"
     | "toilets"
     | "external-events"
   >("calendar");
@@ -908,6 +909,8 @@ export default function App({
             <OrganisersPage />
           ) : page === "location" ? (
             <LocationPage />
+          ) : page === "hotel-recs" ? (
+            <HotelRecommendationsPage />
           ) : page === "toilets" ? (
             <ToiletMapPage />
           ) : page === "external-events" ? (
@@ -1016,6 +1019,7 @@ export default function App({
                 setPage("calendar");
                 setScheduleMode("spreadsheet");
               }}
+              onOpenBusinessMeetings={() => setPage("business-meetings")}
             />
           )}
         </main>
@@ -1157,6 +1161,7 @@ function Sidebar({
       | "decisions"
       | "organisers"
       | "location"
+      | "hotel-recs"
       | "toilets"
       | "external-events",
   ) => void;
@@ -1176,6 +1181,7 @@ function Sidebar({
       icon: LayoutList,
     },
     { id: "location", label: copy.venueLocation, icon: MapPin },
+    { id: "hotel-recs", label: "Hotel Recs", icon: Building2 },
     { id: "toilets", label: copy.toiletMap, icon: Toilet },
     { id: "external-events", label: copy.externalLinks, icon: Link2 },
   ];
@@ -1261,6 +1267,7 @@ function Sidebar({
                     | "decisions"
                     | "organisers"
                     | "location"
+                    | "hotel-recs"
                     | "toilets"
                     | "external-events",
                 );
@@ -1560,6 +1567,100 @@ function LocationPage() {
         className="mt-6 h-[420px] w-full rounded-2xl border"
         src="https://www.google.com/maps?q=77%20Fulham%20Palace%20Road%20London%20W6%208AF&output=embed"
       />
+    </div>
+  );
+}
+
+type HotelRecommendation = {
+  name: string;
+  address: string;
+  typicalNightlyRate: string;
+  note: string;
+  bookingUrl: string;
+};
+
+const hotelRecommendations: Record<
+  "Hammersmith" | "Cambridge" | "Oxford" | "Birmingham",
+  { subtitle: string; hotels: HotelRecommendation[] }
+> = {
+  Hammersmith: {
+    subtitle: "Best for the Foundry and west-London programme days.",
+    hotels: [
+      { name: "Premier Inn London Hammersmith", address: "255 King Street, London W6 9LU", typicalNightlyRate: "~£120", note: "Reliable value option close to Hammersmith Broadway.", bookingUrl: "https://www.premierinn.com/gb/en/hotels/england/greater-london/london/london-hammersmith-talgarth-road.html" },
+      { name: "Novotel London West", address: "1 Shortlands, London W6 8DR", typicalNightlyRate: "~£180", note: "Large business hotel, a short walk from the programme base.", bookingUrl: "https://all.accor.com/hotel/0737/index.en.shtml" },
+      { name: "Holiday Inn Express London – Hammersmith", address: "124 King Street, London W6 0QU", typicalNightlyRate: "~£150", note: "Straightforward breakfast-included stay near the Tube.", bookingUrl: "https://www.ihg.com/holidayinnexpress/hotels/gb/en/london/lonhm/hoteldetail" },
+      { name: "St Paul's Hotel", address: "153 Hammersmith Road, London W14 0QL", typicalNightlyRate: "~£190", note: "Boutique option near Olympia and Brook Green.", bookingUrl: "https://www.stpaulshotel.co.uk/" },
+    ],
+  },
+  Cambridge: {
+    subtitle: "Useful for university, science-park and investor visits.",
+    hotels: [
+      { name: "ibis Cambridge Central Station", address: "2 Station Square, Cambridge CB1 2GA", typicalNightlyRate: "~£125", note: "Practical base directly beside Cambridge station.", bookingUrl: "https://all.accor.com/hotel/A0I9/index.en.shtml" },
+      { name: "Clayton Hotel Cambridge", address: "Station Road, Cambridge CB1 2FB", typicalNightlyRate: "~£175", note: "Modern business hotel opposite the station.", bookingUrl: "https://www.claytonhotelcambridge.com/" },
+      { name: "Hilton Cambridge City Centre", address: "20 Downing Street, Cambridge CB2 3DT", typicalNightlyRate: "~£190", note: "Central choice for colleges, meetings and evening dining.", bookingUrl: "https://www.hilton.com/en/hotels/camchhi-hilton-cambridge-city-centre/" },
+      { name: "University Arms", address: "Regent Street, Cambridge CB2 1AD", typicalNightlyRate: "~£240", note: "Premium city-centre stay overlooking Parker's Piece.", bookingUrl: "https://www.marriott.com/en-gb/hotels/cbgak-university-arms-hotel-autograph-collection/overview/" },
+    ],
+  },
+  Oxford: {
+    subtitle: "Convenient for university, research and Oxfordshire meetings.",
+    hotels: [
+      { name: "Courtyard by Marriott Oxford City Centre", address: "15 Paradise Street, Oxford OX1 1LD", typicalNightlyRate: "~£190", note: "Central, modern option close to Oxford station and Westgate.", bookingUrl: "https://www.marriott.com/en-gb/hotels/oxfcy-courtyard-oxford-city-centre/overview/" },
+      { name: "Malmaison Oxford", address: "3 Oxford Castle, Oxford OX1 1AY", typicalNightlyRate: "~£210", note: "Characterful central hotel in the historic castle quarter.", bookingUrl: "https://www.malmaison.com/locations/oxford/" },
+      { name: "voco Oxford Spires", address: "Abingdon Road, Oxford OX1 4PS", typicalNightlyRate: "~£175", note: "Quieter riverside option with parking access.", bookingUrl: "https://www.ihg.com/voco/hotels/gb/en/oxford/oxfss/hoteldetail" },
+      { name: "The Randolph Hotel", address: "Beaumont Street, Oxford OX1 2LN", typicalNightlyRate: "~£300", note: "Premium stay opposite the Ashmolean Museum.", bookingUrl: "https://www.therandolphhotel.com/" },
+    ],
+  },
+  Birmingham: {
+    subtitle: "City-centre options for Birmingham Tech Week and related events.",
+    hotels: [
+      { name: "Aloft Birmingham Eastside", address: "4 Woodcock Street, Birmingham B7 4BL", typicalNightlyRate: "~£120", note: "Contemporary hotel near Digbeth, Bullring and Eastside venues.", bookingUrl: "https://www.marriott.com/en-gb/hotels/bhxal-aloft-birmingham-eastside/overview/" },
+      { name: "Clayton Hotel Birmingham", address: "85 Albert Street, Birmingham B5 5JE", typicalNightlyRate: "~£135", note: "Business-friendly city-centre option by the Bullring.", bookingUrl: "https://www.claytonhotelbirmingham.com/" },
+      { name: "AC Hotel Birmingham", address: "160 Wharfside Street, The Mailbox, Birmingham B1 1RL", typicalNightlyRate: "~£150", note: "Canalside stay at the Mailbox, close to New Street station.", bookingUrl: "https://www.marriott.com/en-gb/hotels/bhxac-ac-hotel-birmingham/overview/" },
+      { name: "Holiday Inn Birmingham City Centre", address: "Smallbrook Queensway, Birmingham B5 4EW", typicalNightlyRate: "~£115", note: "Central and convenient for rail arrivals and conference travel.", bookingUrl: "https://www.ihg.com/holidayinn/hotels/gb/en/birmingham/bhxct/hoteldetail" },
+    ],
+  },
+};
+
+function HotelRecommendationsPage() {
+  const locations = Object.keys(hotelRecommendations) as Array<keyof typeof hotelRecommendations>;
+  const [location, setLocation] = useState<keyof typeof hotelRecommendations>("Hammersmith");
+  const guide = hotelRecommendations[location];
+  return (
+    <div>
+      <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">Travel planning</p>
+      <h1 className="mt-1 text-3xl font-semibold tracking-tight">Hotel Recs</h1>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+        A small shortlist for the locations the cohort may visit. Typical rates are indicative per room, per night; check the booking link for your dates.
+      </p>
+      <div className="mt-6 flex flex-wrap gap-2">
+        {locations.map((entry) => (
+          <button key={entry} type="button" onClick={() => setLocation(entry)} className={cn("rounded-full px-4 py-2 text-sm font-bold transition", location === entry ? "bg-[#162c5b] text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50")}>
+            {entry}
+          </button>
+        ))}
+      </div>
+      <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50/60 px-5 py-4 text-sm text-indigo-900">
+        <span className="font-bold">{location}:</span> {guide.subtitle}
+      </div>
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        {guide.hotels.map((hotel) => {
+          const directionsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${hotel.name}, ${hotel.address}`)}`;
+          return (
+            <article key={hotel.name} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,.03)]">
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="text-lg font-semibold text-slate-950">{hotel.name}</h2>
+                <span className="shrink-0 text-sm font-bold text-emerald-700">{hotel.typicalNightlyRate}<span className="block text-[10px] font-medium text-slate-500">/ night</span></span>
+              </div>
+              <p className="mt-2 flex gap-1.5 text-sm text-slate-600"><MapPin className="mt-0.5 size-4 shrink-0 text-slate-400" />{hotel.address}</p>
+              <p className="mt-3 text-sm leading-6 text-slate-600">{hotel.note}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <a href={hotel.bookingUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg bg-[#162c5b] px-3 py-2 text-xs font-bold text-white hover:bg-[#223d78]">Check rooms <ExternalLink className="size-3.5" /></a>
+                <a href={directionsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Directions <MapPin className="size-3.5" /></a>
+              </div>
+            </article>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -3562,16 +3663,21 @@ function DecisionsPage({
   items,
   profile,
   onOpenSchedule,
+  onOpenBusinessMeetings,
 }: {
   items: ScheduleItem[];
   profile: Profile;
   onOpenSchedule: () => void;
+  onOpenBusinessMeetings: () => void;
 }) {
   const responseFor = (item: ScheduleItem) =>
     item.responses.find(
       (response) => response.organisationId === profile.organisationId,
     )?.decision ?? "undecided";
-  const actionableItems = items.filter((item) => item.itemType !== "company_work");
+  const actionableItems = items.filter(
+    (item) =>
+      item.itemType !== "company_work" && !isGenericBusinessMeetingSlot(item),
+  );
   const groups = profile.role === "lvnc_admin"
     ? [
         { title: "Needs a cohort response", items: items.filter((item) => item.responses.some((response) => response.decision === "undecided")) },
@@ -3584,6 +3690,34 @@ function DecisionsPage({
   const pendingCount = actionableItems.filter((item) =>
     ["undecided", "interested"].includes(responseFor(item)),
   ).length;
+  const pendingItems = actionableItems.filter((item) =>
+    ["undecided", "interested"].includes(responseFor(item)),
+  );
+  const pendingBreakdown = [
+    {
+      title: "Potential Biz Meets",
+      description: "Review named VC, investor and Defence & Security introductions.",
+      items: pendingItems.filter(isPotentialBizMeet),
+      action: "Open Potential Biz Meets",
+      onClick: onOpenBusinessMeetings,
+    },
+    {
+      title: "Conferences & external opportunities",
+      description: "Review optional conferences, forums and third-party events.",
+      items: pendingItems.filter(
+        (item) => item.itemType === "third_party" || isConferenceOrEvent(item),
+      ),
+      action: "Open Schedule",
+      onClick: onOpenSchedule,
+    },
+    {
+      title: "Programme attendance",
+      description: "Confirm compulsory or recommended LVCN programme sessions.",
+      items: pendingItems.filter((item) => item.itemType === "lvnc_core"),
+      action: "Open Schedule",
+      onClick: onOpenSchedule,
+    },
+  ].filter((group) => group.items.length > 0);
   return (
     <div>
       <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">
@@ -3602,21 +3736,36 @@ function DecisionsPage({
             This is your read-only decision summary across programme events,
             opportunities and Potential Biz Meets.
           </p>
-          <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
             <div>
               <p className="text-3xl font-bold text-amber-900">{pendingCount}</p>
               <p className="text-sm font-semibold text-amber-900">
                 {pendingCount === 1 ? "decision needs your attention" : "decisions need your attention"}
               </p>
-              <p className="mt-1 max-w-xl text-xs leading-5 text-amber-800">
-                Choose Confirm or Reject in Schedule → Spreadsheet. Use the
-                Company work control in the sidebar to block personal time.
-              </p>
             </div>
-            <Button type="button" variant="indigo" onClick={onOpenSchedule}>
-              <CalendarDays className="size-4" />
-              Open schedule
-            </Button>
+            <div className="mt-4 space-y-2">
+              {pendingBreakdown.map((group) => (
+                <div
+                  key={group.title}
+                  className="flex flex-col gap-2 rounded-xl border border-amber-200/80 bg-white/70 p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <p className="text-sm leading-5 text-amber-950">
+                    <span className="font-bold">{group.items.length} · {group.title}</span>
+                    <span className="block text-xs text-amber-800">{group.description}</span>
+                  </p>
+                  <Button type="button" variant="ghost" onClick={group.onClick}>
+                    {group.action}
+                    <ArrowRight className="size-4" />
+                  </Button>
+                </div>
+              ))}
+              {pendingBreakdown.length === 0 && (
+                <p className="text-xs text-amber-800">No decisions are currently awaiting review.</p>
+              )}
+            </div>
+            <p className="mt-4 text-xs leading-5 text-amber-800">
+              Use the Company work control in the sidebar only to block personal time; it is separate from event and meeting decisions.
+            </p>
           </div>
         </>
       )}

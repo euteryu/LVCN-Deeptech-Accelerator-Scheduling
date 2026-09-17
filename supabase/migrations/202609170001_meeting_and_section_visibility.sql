@@ -19,7 +19,7 @@ create table if not exists public.meeting_category_visibility (
 );
 
 create table if not exists public.app_section_visibility (
-  section_id text primary key check (section_id in ('calendar', 'business-meetings', 'decisions', 'location', 'toilets', 'external-events')),
+  section_id text primary key check (section_id in ('calendar', 'business-meetings', 'decisions', 'location', 'hotel-recs', 'toilets', 'external-events')),
   visible_to_startups boolean not null default true,
   updated_by uuid references auth.users(id),
   updated_at timestamptz not null default now()
