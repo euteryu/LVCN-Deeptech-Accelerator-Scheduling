@@ -47,6 +47,12 @@ export interface Response {
   note?: string;
   updatedAt: string;
 }
+export interface MeetingTarget {
+  organisationId: string;
+  outreachStatus: "Contacted" | "Agreed" | "Rejected";
+  availabilityNote?: string;
+  coordinationNote?: string;
+}
 export interface ScheduleItem {
   id: string;
   title: string;
@@ -79,6 +85,7 @@ export interface ScheduleItem {
   meetingStatus?: string;
   contactName?: string;
   meetingNote?: string;
+  meetingTargets?: MeetingTarget[];
   responses: Response[];
 }
 export interface AvailabilityBlock {

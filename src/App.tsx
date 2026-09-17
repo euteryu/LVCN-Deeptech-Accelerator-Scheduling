@@ -61,6 +61,7 @@ import type {
   AvailabilityBlock,
   Decision,
   ItemType,
+  MeetingTarget,
   Profile,
   ScheduleItem,
   ViewMode,
@@ -265,6 +266,18 @@ const scheduleItemValues = (item: ScheduleItem) => ({
   contact_name: item.contactName || null,
   meeting_note: item.meetingNote || null,
 });
+const meetingTargetValues = (item: ScheduleItem, organisationId: string) => {
+  const target = item.meetingTargets?.find(
+    (entry) => entry.organisationId === organisationId,
+  );
+  return {
+    schedule_item_id: item.id,
+    organisation_id: organisationId,
+    meeting_outreach_status: target?.outreachStatus ?? "Contacted",
+    availability_note: target?.availabilityNote || null,
+    coordination_note: target?.coordinationNote || null,
+  };
+};
 const calendarState = (item: ScheduleItem, decision?: Decision) =>
   item.status === "confirmed" ||
   ["going", "acknowledged"].includes(decision ?? "")
@@ -511,18 +524,26 @@ export default function App({
     const client = supabase;
     if (!productionMode || !client) return;
     const load = async () => {
+      const scheduleSelect =
+        "*, schedule_item_organisations(organisation_id,meeting_outreach_status,availability_note,coordination_note), event_responses(organisation_id,decision,note,updated_at), schedule_item_conflict_groups(conflict_group_id)";
+      const legacyScheduleSelect =
+        "*, schedule_item_organisations(organisation_id), event_responses(organisation_id,decision,note,updated_at), schedule_item_conflict_groups(conflict_group_id)";
+      let scheduleResult = await client
+        .from("schedule_items")
+        .select(scheduleSelect)
+        .order("starts_at", { ascending: true, nullsFirst: false });
+      // Keep the board usable while an administrator is applying the optional
+      // per-startup coordination migration.
+      if (scheduleResult.error)
+        scheduleResult = await client
+          .from("schedule_items")
+          .select(legacyScheduleSelect)
+          .order("starts_at", { ascending: true, nullsFirst: false });
       const [
-        { data: scheduleRows, error: scheduleError },
         { data: availabilityRows, error: availabilityError },
         { data: categoryRows, error: categoryError },
         { data: sectionRows, error: sectionError },
       ] = await Promise.all([
-        client
-          .from("schedule_items")
-          .select(
-            "*, schedule_item_organisations(organisation_id), event_responses(organisation_id,decision,note,updated_at), schedule_item_conflict_groups(conflict_group_id)",
-          )
-          .order("starts_at", { ascending: true, nullsFirst: false }),
         client
           .from("availability_blocks")
           .select("id,organisation_id,title,note,starts_at,ends_at")
@@ -532,9 +553,9 @@ export default function App({
           .select("category,visible_to_startups"),
         client.from("app_section_visibility").select("section_id,visible_to_startups"),
       ]);
-      if (scheduleError || availabilityError || categoryError || sectionError) {
+      if (scheduleResult.error || availabilityError || categoryError || sectionError) {
         setToast(
-          scheduleError?.message ??
+          scheduleResult.error?.message ??
             availabilityError?.message ??
             categoryError?.message ??
             sectionError?.message ??
@@ -543,7 +564,7 @@ export default function App({
         return;
       }
       setItems(
-        (scheduleRows ?? []).map((row: any) => ({
+        (scheduleResult.data ?? []).map((row: any) => ({
           id: row.id,
           title: normaliseGenericBusinessMeetingTitle(row.title),
           description: row.description ?? undefined,
@@ -574,6 +595,16 @@ export default function App({
           meetingStatus: row.meeting_status ?? undefined,
           contactName: row.contact_name ?? undefined,
           meetingNote: row.meeting_note ?? undefined,
+          meetingTargets: row.schedule_item_organisations.map((entry: any) => ({
+            organisationId: entry.organisation_id,
+            outreachStatus:
+              entry.meeting_outreach_status === "Agreed" ||
+              entry.meeting_outreach_status === "Rejected"
+                ? entry.meeting_outreach_status
+                : "Contacted",
+            availabilityNote: entry.availability_note ?? undefined,
+            coordinationNote: entry.coordination_note ?? undefined,
+          })),
           conflictGroupId:
             row.schedule_item_conflict_groups[0]?.conflict_group_id,
           responses: row.event_responses.map((response: any) => ({
@@ -815,10 +846,9 @@ export default function App({
       item.organisationIds.length
     )
       await supabase.from("schedule_item_organisations").insert(
-        item.organisationIds.map((organisationId) => ({
-          schedule_item_id: item.id,
-          organisation_id: organisationId,
-        })),
+        item.organisationIds.map((organisationId) =>
+          meetingTargetValues(item, organisationId),
+        ),
       );
   };
   function restoreHistoryItems(
@@ -837,6 +867,17 @@ export default function App({
       const organisationIdsMatch = (left: ScheduleItem, right: ScheduleItem) =>
         [...left.organisationIds].sort().join(",") ===
         [...right.organisationIds].sort().join(",");
+      const coordinationMatches = (left: ScheduleItem, right: ScheduleItem) =>
+        JSON.stringify(
+          [...left.organisationIds]
+            .sort()
+            .map((organisationId) => meetingTargetValues(left, organisationId)),
+        ) ===
+        JSON.stringify(
+          [...right.organisationIds]
+            .sort()
+            .map((organisationId) => meetingTargetValues(right, organisationId)),
+        );
       const responseForCurrentOrganisation = (item: ScheduleItem) =>
         item.responses.find(
           (response) => response.organisationId === profile.organisationId,
@@ -865,12 +906,21 @@ export default function App({
             const { error: insertError } = await client
               .from("schedule_item_organisations")
               .insert(
-                item.organisationIds.map((organisationId) => ({
-                  schedule_item_id: id,
-                  organisation_id: organisationId,
-                })),
+                item.organisationIds.map((organisationId) =>
+                  meetingTargetValues(item, organisationId),
+                ),
               );
             if (insertError) throw insertError;
+          }
+        }
+        if (organisationIdsMatch(previous, item) && !coordinationMatches(previous, item)) {
+          for (const organisationId of item.organisationIds) {
+            const { error } = await client
+              .from("schedule_item_organisations")
+              .update(meetingTargetValues(item, organisationId))
+              .eq("schedule_item_id", id)
+              .eq("organisation_id", organisationId);
+            if (error) throw error;
           }
         }
         const oldResponse = responseForCurrentOrganisation(previous);
@@ -992,13 +1042,42 @@ export default function App({
           .eq("schedule_item_id", item.id);
         if (item.visibilityScope === "selected_organisations")
           await supabase.from("schedule_item_organisations").insert(
-            item.organisationIds.map((organisationId) => ({
-              schedule_item_id: item.id,
-              organisation_id: organisationId,
-            })),
+            item.organisationIds.map((organisationId) =>
+              meetingTargetValues(item, organisationId),
+            ),
           );
       })();
     showToast("Item updated");
+  };
+  const updateMeetingTarget = (itemId: string, target: MeetingTarget) => {
+    setItemsWithHistory((current) =>
+      current.map((item) =>
+        item.id !== itemId
+          ? item
+          : {
+              ...item,
+              meetingTargets: [
+                ...(item.meetingTargets ?? []).filter(
+                  (entry) => entry.organisationId !== target.organisationId,
+                ),
+                target,
+              ],
+            },
+      ),
+    );
+    if (productionMode && supabase)
+      void supabase
+        .from("schedule_item_organisations")
+        .update({
+          meeting_outreach_status: target.outreachStatus,
+          availability_note: target.availabilityNote || null,
+          coordination_note: target.coordinationNote || null,
+        })
+        .eq("schedule_item_id", itemId)
+        .eq("organisation_id", target.organisationId)
+        .then(({ error }) =>
+          showToast(error ? error.message : "Meeting coordination saved"),
+        );
   };
   const setMeetingCategoryVisible = (category: string, visible: boolean) => {
     setHiddenMeetingCategories((current) =>
@@ -1269,6 +1348,7 @@ export default function App({
             setHighlightMeetingNote(false);
           }}
           onDecision={updateDecision}
+          onMeetingTargetUpdate={(target) => updateMeetingTarget(selected.id, target)}
           onEdit={() => setEditOpen(true)}
           onDuplicate={() => duplicateItem(selected)}
           onCancel={() => cancelItem(selected)}
@@ -4085,6 +4165,132 @@ function BusinessMeetingsPage({
   );
 }
 
+function AdminDecisionsDashboard({
+  items,
+  onOpenSchedule,
+  onOpenBusinessMeetings,
+}: {
+  items: ScheduleItem[];
+  onOpenSchedule: () => void;
+  onOpenBusinessMeetings: () => void;
+}) {
+  const actionable = items.filter(
+    (item) =>
+      item.itemType !== "company_work" && !isGenericBusinessMeetingSlot(item),
+  );
+  const decisionFor = (item: ScheduleItem, organisationId: string) =>
+    item.responses.find((response) => response.organisationId === organisationId)
+      ?.decision ?? "undecided";
+  const appliesTo = (item: ScheduleItem, organisationId: string) =>
+    item.visibilityScope === "cohort" || item.organisationIds.includes(organisationId);
+  const startupRows = organisations.map((organisation) => {
+    const assigned = actionable.filter((item) => appliesTo(item, organisation.id));
+    const decisions = assigned.map((item) => decisionFor(item, organisation.id));
+    return {
+      organisation,
+      pending: decisions.filter((decision) => ["undecided", "interested"].includes(decision)).length,
+      confirmed: decisions.filter((decision) => ["going", "acknowledged"].includes(decision)).length,
+      rejected: decisions.filter((decision) => decision === "pass").length,
+      total: assigned.length,
+    };
+  });
+  const totals = startupRows.reduce(
+    (current, row) => ({
+      pending: current.pending + row.pending,
+      confirmed: current.confirmed + row.confirmed,
+      rejected: current.rejected + row.rejected,
+    }),
+    { pending: 0, confirmed: 0, rejected: 0 },
+  );
+  const meetingTargets = items
+    .filter(isPotentialBizMeet)
+    .flatMap((item) =>
+      item.organisationIds.map((organisationId) => {
+        const target = item.meetingTargets?.find(
+          (entry) => entry.organisationId === organisationId,
+        );
+        return {
+          item,
+          organisation: organisations.find((org) => org.id === organisationId),
+          status: target?.outreachStatus ?? "Contacted",
+          hasAvailability: Boolean(target?.availabilityNote),
+        };
+      }),
+    );
+  const outreachTotals = meetingTargets.reduce(
+    (current, target) => ({
+      ...current,
+      [target.status.toLowerCase()]: current[target.status.toLowerCase() as "contacted" | "agreed" | "rejected"] + 1,
+    }),
+    { contacted: 0, agreed: 0, rejected: 0 },
+  );
+  return (
+    <div>
+      <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">LVCN control centre</p>
+      <h1 className="mt-1 text-3xl font-semibold tracking-tight">Cohort decisions</h1>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+        Monitor startup responses, then coordinate shared introductions without duplicating an institution for every company.
+      </p>
+      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        {[
+          { label: "Awaiting startup decisions", value: totals.pending, tone: "border-amber-200 bg-amber-50 text-amber-900" },
+          { label: "Confirmed attendance", value: totals.confirmed, tone: "border-emerald-200 bg-emerald-50 text-emerald-900" },
+          { label: "Rejected / not attending", value: totals.rejected, tone: "border-slate-200 bg-slate-50 text-slate-800" },
+        ].map((metric) => (
+          <section key={metric.label} className={cn("rounded-2xl border p-4", metric.tone)}>
+            <p className="text-3xl font-bold">{metric.value}</p>
+            <p className="mt-1 text-sm font-semibold">{metric.label}</p>
+          </section>
+        ))}
+      </div>
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,.03)]">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-semibold">Startup response board</h2>
+            <p className="mt-1 text-xs text-slate-500">Counts are per startup, across the items visible to that startup.</p>
+          </div>
+          <Button type="button" variant="secondary" onClick={onOpenSchedule}>Open master schedule</Button>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-[620px] w-full text-left text-sm">
+            <thead className="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[.1em] text-slate-500">
+              <tr><th className="px-3 py-2">Startup</th><th className="px-3 py-2 text-right">Pending</th><th className="px-3 py-2 text-right">Confirmed</th><th className="px-3 py-2 text-right">Rejected</th><th className="px-3 py-2 text-right">Assigned</th></tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {startupRows.sort((left, right) => right.pending - left.pending).map((row) => (
+                <tr key={row.organisation.id}>
+                  <td className="px-3 py-2.5 font-semibold">{row.organisation.name}</td>
+                  <td className="px-3 py-2.5 text-right font-bold text-amber-700">{row.pending}</td>
+                  <td className="px-3 py-2.5 text-right text-emerald-700">{row.confirmed}</td>
+                  <td className="px-3 py-2.5 text-right text-slate-600">{row.rejected}</td>
+                  <td className="px-3 py-2.5 text-right text-slate-500">{row.total}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section className="mt-6 rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-semibold text-indigo-950">Potential Biz Meet coordination</h2>
+            <p className="mt-1 text-xs leading-5 text-indigo-800">Each target startup has its own outreach status and flexible availability notes; one institution can be shared safely.</p>
+          </div>
+          <Button type="button" variant="indigo" onClick={onOpenBusinessMeetings}>Manage Potential Biz Meets</Button>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl bg-white p-3"><p className="text-2xl font-bold text-amber-700">{outreachTotals.contacted}</p><p className="text-xs font-semibold text-slate-600">Contacted</p></div>
+          <div className="rounded-xl bg-white p-3"><p className="text-2xl font-bold text-emerald-700">{outreachTotals.agreed}</p><p className="text-xs font-semibold text-slate-600">Agreed</p></div>
+          <div className="rounded-xl bg-white p-3"><p className="text-2xl font-bold text-rose-700">{outreachTotals.rejected}</p><p className="text-xs font-semibold text-slate-600">Rejected</p></div>
+        </div>
+        {meetingTargets.some((target) => target.status === "Agreed" && !target.hasAvailability) && (
+          <p className="mt-3 text-xs font-semibold text-amber-800">Some agreed introductions still need availability windows. Open Potential Biz Meets to add one or more offered times.</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function DecisionsPage({
   items,
   profile,
@@ -4098,6 +4304,14 @@ function DecisionsPage({
   onOpenSchedule: () => void;
   onOpenBusinessMeetings: () => void;
 }) {
+  if ((profile.role as string) === "lvnc_admin")
+    return (
+      <AdminDecisionsDashboard
+        items={items}
+        onOpenSchedule={onOpenSchedule}
+        onOpenBusinessMeetings={onOpenBusinessMeetings}
+      />
+    );
   const responseFor = (item: ScheduleItem) =>
     item.responses.find(
       (response) => response.organisationId === profile.organisationId,
@@ -4106,15 +4320,10 @@ function DecisionsPage({
     (item) =>
       item.itemType !== "company_work" && !isGenericBusinessMeetingSlot(item),
   );
-  const groups = profile.role === "lvnc_admin"
-    ? [
-        { title: "Needs a cohort response", items: items.filter((item) => item.responses.some((response) => response.decision === "undecided")) },
-        { title: "Booking or action required", items: items.filter((item) => item.bookingStatus !== "not_required" && item.bookingStatus !== "verified") },
-      ]
-    : [
-        { title: "Confirmed", items: actionableItems.filter((item) => ["going", "acknowledged"].includes(responseFor(item))) },
-        { title: "Rejected", items: actionableItems.filter((item) => responseFor(item) === "pass") },
-      ];
+  const groups = [
+    { title: "Confirmed", items: actionableItems.filter((item) => ["going", "acknowledged"].includes(responseFor(item))) },
+    { title: "Rejected", items: actionableItems.filter((item) => responseFor(item) === "pass") },
+  ];
   const pendingCount = actionableItems.filter((item) =>
     ["undecided", "interested"].includes(responseFor(item)),
   ).length;
@@ -4154,12 +4363,7 @@ function DecisionsPage({
       <h1 className="mt-1 text-3xl font-semibold tracking-tight">
         {profile.role === "lvnc_admin" ? (language === "ko" ? "코호트 결정" : "Cohort decisions") : (language === "ko" ? "내 결정" : "My decisions")}
       </h1>
-      {profile.role === "lvnc_admin" ? (
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-          A focused view of choices and follow-up, without the calendar noise.
-        </p>
-      ) : (
-        <>
+      <>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
             {language === "ko" ? "프로그램 행사, 외부 기회 및 잠재 비즈니스 미팅 전체에 대한 읽기 전용 결정 요약입니다." : "This is your read-only decision summary across programme events, opportunities and Potential Biz Meets."}
           </p>
@@ -4195,8 +4399,7 @@ function DecisionsPage({
               {language === "ko" ? "사이드바의 회사 업무 기능은 개인 시간을 차단할 때만 사용하세요. 행사 및 미팅 결정과는 별개입니다." : "Use the Company work control in the sidebar only to block personal time; it is separate from event and meeting decisions."}
             </p>
           </div>
-        </>
-      )}
+      </>
       <div className="mt-7 grid gap-5 lg:grid-cols-2">
         {groups.map((group) => (
           <section
@@ -4250,6 +4453,7 @@ function ItemDrawer({
   highlightMeetingNote,
   onClose,
   onDecision,
+  onMeetingTargetUpdate,
   onEdit,
   onDuplicate,
   onCancel,
@@ -4262,6 +4466,7 @@ function ItemDrawer({
   highlightMeetingNote: boolean;
   onClose: () => void;
   onDecision: (decision: Decision, note?: string) => void;
+  onMeetingTargetUpdate: (target: MeetingTarget) => void;
   onEdit: () => void;
   onDuplicate: () => void;
   onCancel: () => void;
@@ -4434,6 +4639,33 @@ function ItemDrawer({
               </p>
             </section>
           )}
+          {isAdmin && item.itemType === "business_meeting" && item.organisationIds.length > 0 && (
+            <section className="mt-6 border-t border-slate-100 pt-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="font-semibold">Startup coordination</h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Track outreach separately for each startup. Use availability windows for several offered times or flexible constraints.
+                  </p>
+                </div>
+                <Badge>{item.organisationIds.length} startup{item.organisationIds.length === 1 ? "" : "s"}</Badge>
+              </div>
+              <div className="mt-4 space-y-3">
+                {item.organisationIds.map((organisationId) => (
+                  <MeetingTargetEditor
+                    key={`${item.id}-${organisationId}`}
+                    organisation={organisations.find((org) => org.id === organisationId)}
+                    target={
+                      item.meetingTargets?.find(
+                        (entry) => entry.organisationId === organisationId,
+                      ) ?? { organisationId, outreachStatus: "Contacted" }
+                    }
+                    onSave={onMeetingTargetUpdate}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
           {conflicts.length > 0 && (
             <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4">
               <div className="flex gap-2">
@@ -4524,6 +4756,63 @@ function ItemDrawer({
         </div>
       </aside>
     </>
+  );
+}
+
+function MeetingTargetEditor({
+  organisation,
+  target,
+  onSave,
+}: {
+  organisation?: { id: string; name: string };
+  target: MeetingTarget;
+  onSave: (target: MeetingTarget) => void;
+}) {
+  const [draft, setDraft] = useState(target);
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-bold text-slate-800">
+          {organisation?.name ?? "Target startup"}
+        </p>
+        <Select
+          value={draft.outreachStatus}
+          onChange={(event) =>
+            setDraft((current) => ({
+              ...current,
+              outreachStatus: event.target.value as MeetingTarget["outreachStatus"],
+            }))
+          }
+          className="h-8 w-28 py-1 text-xs font-bold"
+          aria-label={`Outreach status for ${organisation?.name ?? "startup"}`}
+        >
+          <option>Contacted</option>
+          <option>Agreed</option>
+          <option>Rejected</option>
+        </Select>
+      </div>
+      <textarea
+        value={draft.availabilityNote ?? ""}
+        onChange={(event) =>
+          setDraft((current) => ({ ...current, availabilityNote: event.target.value }))
+        }
+        placeholder="Availability windows, e.g. Thu 22 Oct 10:00–12:00 or Fri afternoon"
+        className="mt-2 min-h-16 w-full rounded-lg border border-slate-200 bg-white p-2 text-xs outline-none focus:border-indigo-400"
+      />
+      <textarea
+        value={draft.coordinationNote ?? ""}
+        onChange={(event) =>
+          setDraft((current) => ({ ...current, coordinationNote: event.target.value }))
+        }
+        placeholder="Internal coordination note (optional)"
+        className="mt-2 min-h-14 w-full rounded-lg border border-slate-200 bg-white p-2 text-xs outline-none focus:border-indigo-400"
+      />
+      <div className="mt-2 flex justify-end">
+        <Button type="button" variant="secondary" className="h-8 px-3 text-xs" onClick={() => onSave(draft)}>
+          Save coordination
+        </Button>
+      </div>
+    </div>
   );
 }
 
