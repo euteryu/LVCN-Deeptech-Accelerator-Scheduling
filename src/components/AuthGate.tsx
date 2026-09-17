@@ -131,7 +131,7 @@ export function AuthGate({
         Deeptech Accelerator Schedule
       </h1>
       <p className="mt-3 text-sm leading-6 text-slate-500">
-        Enter the email address LVCN has registered for you.
+        Enter the email address you provided to LVCN during correspondence.
       </p>
       <form className="mt-7" onSubmit={signIn}>
         <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
