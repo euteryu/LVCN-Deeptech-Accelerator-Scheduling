@@ -239,6 +239,10 @@ const validTimestamp = (value: unknown) => {
   // imports (the source of the production render failure).
   return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
 };
+const safeDate = (value?: string | Date) => {
+  const parsed = value instanceof Date ? value : new Date(value ?? "");
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+};
 const scheduleItemValues = (item: ScheduleItem) => ({
   title: item.title,
   description: item.description || null,
@@ -2795,18 +2799,20 @@ function SpreadsheetBoard({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {rows.map((item, index) => {
-              const dateKey = item.startsAt
-                ? format(new Date(item.startsAt), "yyyy-MM-dd")
+              const itemDate = safeDate(item.startsAt);
+              const itemEndDate = safeDate(item.endsAt);
+              const dateKey = itemDate
+                ? format(itemDate, "yyyy-MM-dd")
                 : "unknown";
               const previousItem = rows[index - 1];
-              const previousItemDate = previousItem?.startsAt
-                ? format(new Date(previousItem.startsAt), "yyyy-MM-dd")
+              const previousItemDate = safeDate(previousItem?.startsAt)
+                ? format(safeDate(previousItem?.startsAt)!, "yyyy-MM-dd")
                 : previousItem
                   ? "unknown"
                   : "";
               const showDateBand = dateKey !== previousItemDate;
-              const isAnchoredDate = item.startsAt
-                ? isSameDay(new Date(item.startsAt), anchorDate)
+              const isAnchoredDate = itemDate
+                ? isSameDay(itemDate, anchorDate)
                 : false;
               const meta = itemMeta[item.itemType];
               const decision = item.responses.find(
@@ -2839,23 +2845,28 @@ function SpreadsheetBoard({
                   ),
               );
               const conflict = availabilityConflict || alternativeChoiceConflict;
-              const scheduleOverlapItems = items.filter(
-                (other) =>
-                  other.id !== item.id &&
-                  other.itemType !== "company_work" &&
-                  other.startsAt &&
-                  !other.responses.some(
-                    (response) =>
-                      response.organisationId === profile.organisationId &&
-                      response.decision === "pass",
-                  ) &&
-                  overlaps(
-                    item.startsAt!,
-                    item.endsAt ?? new Date(new Date(item.startsAt!).getTime() + 3600000).toISOString(),
-                    other.startsAt!,
-                    other.endsAt,
-                  ),
-              );
+              const scheduleOverlapItems = itemDate
+                ? items.filter((other) => {
+                    const otherDate = safeDate(other.startsAt);
+                    const otherEndDate = safeDate(other.endsAt);
+                    return (
+                      other.id !== item.id &&
+                      other.itemType !== "company_work" &&
+                      otherDate &&
+                      !other.responses.some(
+                        (response) =>
+                          response.organisationId === profile.organisationId &&
+                          response.decision === "pass",
+                      ) &&
+                      overlaps(
+                        itemDate.toISOString(),
+                        (itemEndDate ?? new Date(itemDate.getTime() + 3600000)).toISOString(),
+                        otherDate.toISOString(),
+                        otherEndDate?.toISOString(),
+                      )
+                    );
+                  })
+                : [];
               const hasScheduleOverlap = scheduleOverlapItems.length > 0;
               const priceNote =
                 item.costNote &&
@@ -2869,14 +2880,14 @@ function SpreadsheetBoard({
                       role="button"
                       tabIndex={0}
                       onClick={() =>
-                        item.startsAt && onSelectDay(new Date(item.startsAt))
+                        itemDate && onSelectDay(itemDate)
                       }
                       onKeyDown={(event) => {
                         if (
                           (event.key === "Enter" || event.key === " ") &&
-                          item.startsAt
+                          itemDate
                         )
-                          onSelectDay(new Date(item.startsAt));
+                          onSelectDay(itemDate);
                       }}
                       className={cn(
                         "cursor-pointer bg-[#9acb82] text-[13px] font-bold text-slate-950 hover:bg-[#abd392]",
@@ -2885,8 +2896,8 @@ function SpreadsheetBoard({
                       )}
                     >
                       <td colSpan={7} className="px-3 py-1.5">
-                        {item.startsAt
-                          ? format(new Date(item.startsAt), "EEEE, d MMMM yyyy")
+                        {itemDate
+                          ? format(itemDate, "EEEE, d MMMM yyyy")
                           : "Date to confirm"}
                       </td>
                     </tr>
@@ -2929,15 +2940,15 @@ function SpreadsheetBoard({
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 align-top text-xs font-semibold text-slate-700">
-                      {item.startsAt && item.timePrecision !== "all_day"
-                        ? format(new Date(item.startsAt), "HH:mm")
-                        : item.startsAt
+                      {itemDate && item.timePrecision !== "all_day"
+                        ? format(itemDate, "HH:mm")
+                        : itemDate
                           ? "All day"
                           : "—"}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 align-top text-xs font-semibold text-slate-700">
-                      {item.endsAt && item.timePrecision !== "all_day"
-                        ? format(new Date(item.endsAt), "HH:mm")
+                      {itemEndDate && item.timePrecision !== "all_day"
+                        ? format(itemEndDate, "HH:mm")
                         : "—"}
                     </td>
                     <td className="px-3 py-2 align-top">
