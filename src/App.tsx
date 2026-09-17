@@ -494,6 +494,7 @@ export default function App({
   const [mobileMenu, setMobileMenu] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createDefaultType, setCreateDefaultType] = useState<ItemType>();
   const [createRange, setCreateRange] = useState<{
     startsAt?: string;
     endsAt?: string;
@@ -1231,6 +1232,10 @@ export default function App({
               hiddenCategories={hiddenMeetingCategories}
               onCategoryVisibilityChange={setMeetingCategoryVisible}
               onDecision={saveDecision}
+              onAddMeeting={() => {
+                setCreateDefaultType("business_meeting");
+                setCreateOpen(true);
+              }}
               onSelect={(id) => {
                 setHighlightMeetingNote(false);
                 setSelectedId(id);
@@ -1360,6 +1365,7 @@ export default function App({
         setOpen={setCreateOpen}
         isAdmin={isAdmin}
         profile={profile}
+        defaultItemType={createDefaultType}
         initialStartsAt={createRange.startsAt}
         initialEndsAt={createRange.endsAt}
         onCreate={(item) => {
@@ -3832,6 +3838,7 @@ function BusinessMeetingsPage({
   hiddenCategories,
   onCategoryVisibilityChange,
   onDecision,
+  onAddMeeting,
   onSelect,
   onSelectNote,
   language,
@@ -3842,6 +3849,7 @@ function BusinessMeetingsPage({
   hiddenCategories: string[];
   onCategoryVisibilityChange: (category: string, visible: boolean) => void;
   onDecision: (item: ScheduleItem, decision: Decision) => void;
+  onAddMeeting: () => void;
   onSelect: (id: string) => void;
   onSelectNote: (id: string) => void;
   language: Language;
@@ -3943,7 +3951,8 @@ function BusinessMeetingsPage({
       .toLowerCase()
       .includes(query);
   };
-  const matchedCount = items.filter(matchesAdminSearch).length;
+  const displayedItems = query ? items.filter(matchesAdminSearch) : items;
+  const matchedCount = displayedItems.length;
   return (
     <div>
       <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">
@@ -3958,6 +3967,16 @@ function BusinessMeetingsPage({
         {copy.businessIntro}
       </p>
       {isAdmin && (
+        <>
+        <div className="mt-5 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4">
+          <h2 className="font-semibold text-indigo-950">Admin workflow</h2>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs leading-5 text-indigo-900">
+            <li>Add a named institution or person with <strong>Add Potential Biz Meet</strong>.</li>
+            <li>Choose <strong>Selected startups</strong> when only specific companies should see it; choose the same institution for several startups when appropriate.</li>
+            <li>Open the row to edit the profile, link and general meeting details.</li>
+            <li>Under <strong>Startup coordination</strong>, record each startup’s separate outreach status and one or more availability windows.</li>
+          </ol>
+        </div>
         <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,.03)]">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative min-w-0 flex-1">
@@ -3970,16 +3989,18 @@ function BusinessMeetingsPage({
                 aria-label="Search all business meeting records"
               />
             </div>
+            <Button type="button" variant="indigo" onClick={onAddMeeting} className="shrink-0">
+              Add Potential Biz Meet
+            </Button>
             {query && (
               <p className="px-1 text-xs font-semibold text-slate-500">
                 {matchedCount} matching{" "}
-                {matchedCount === 1 ? "record" : "records"} highlighted
+                {matchedCount === 1 ? "record" : "records"} shown
               </p>
             )}
           </div>
           <p className="mt-2 px-1 text-[11px] text-slate-400">
-            Search results stay in the table so repeated institutions or
-            contacts across startups remain visible together.
+            Search filters the table to matching institutions, people, categories and notes.
           </p>
           <div className="mt-3 border-t border-slate-100 pt-3">
             <p className="px-1 text-xs font-bold text-slate-700">
@@ -4011,6 +4032,7 @@ function BusinessMeetingsPage({
             </div>
           </div>
         </div>
+        </>
       )}
       <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.03)]">
         <div className="overflow-x-auto">
@@ -4027,7 +4049,7 @@ function BusinessMeetingsPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {items.map((item) => {
+              {displayedItems.map((item) => {
                 const category = categoryFor(item);
                 const note = noteFor(item);
                 const searchMatch = isAdmin && matchesAdminSearch(item);
@@ -4146,9 +4168,9 @@ function BusinessMeetingsPage({
             </tbody>
           </table>
         </div>
-        {!items.length && (
+        {!displayedItems.length && (
           <p className="p-8 text-center text-sm text-slate-500">
-            {businessCopy.noMeetings}
+            {query ? "No meetings match this search." : businessCopy.noMeetings}
           </p>
         )}
       </div>
@@ -4257,7 +4279,7 @@ function AdminDecisionsDashboard({
               <tr><th className="px-3 py-2">Startup</th><th className="px-3 py-2 text-right">Pending</th><th className="px-3 py-2 text-right">Confirmed</th><th className="px-3 py-2 text-right">Rejected</th><th className="px-3 py-2 text-right">Assigned</th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {startupRows.sort((left, right) => right.pending - left.pending).map((row) => (
+              {[...startupRows].sort((left, right) => right.pending - left.pending).map((row) => (
                 <tr key={row.organisation.id}>
                   <td className="px-3 py-2.5 font-semibold">{row.organisation.name}</td>
                   <td className="px-3 py-2.5 text-right font-bold text-amber-700">{row.pending}</td>
@@ -4970,6 +4992,7 @@ function CreateDialog({
   item,
   isAdmin,
   profile,
+  defaultItemType,
   initialStartsAt,
   initialEndsAt,
   onCreate,
@@ -4979,6 +5002,7 @@ function CreateDialog({
   item?: ScheduleItem;
   isAdmin: boolean;
   profile: Profile;
+  defaultItemType?: ItemType;
   initialStartsAt?: string;
   initialEndsAt?: string;
   onCreate: (item: ScheduleItem) => void;
@@ -4990,7 +5014,7 @@ function CreateDialog({
     item?.organisationIds ?? [],
   );
   const [itemType, setItemType] = useState<ItemType>(
-    item?.itemType ?? (isAdmin ? "lvnc_core" : "third_party"),
+    item?.itemType ?? defaultItemType ?? (isAdmin ? "lvnc_core" : "third_party"),
   );
   const [startValue, setStartValue] = useState(
     item?.startsAt ?? initialStartsAt ?? "",
