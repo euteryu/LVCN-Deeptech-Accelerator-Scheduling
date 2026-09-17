@@ -241,7 +241,7 @@ const meetingCategoryFor = (item: ScheduleItem) =>
   item.description?.match(/^Category:\s*([^\n]+)/)?.[1] ??
   "Business meeting";
 const isGenericBusinessMeetingSlot = (item: ScheduleItem) =>
-  /^business meetings?\s*\((morning|afternoon)\)$/i.test(item.title.trim());
+  /^business meetings?\b/i.test(item.title.trim());
 const isConferenceOrEvent = (item: ScheduleItem) =>
   /\b(conference|summit|forum|expo|exhibition|event|workshop|hackathon|networking)\b/i.test(
     item.title,
