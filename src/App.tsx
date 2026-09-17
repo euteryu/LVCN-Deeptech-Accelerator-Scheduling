@@ -240,6 +240,16 @@ const meetingCategoryFor = (item: ScheduleItem) =>
   item.meetingCategory ??
   item.description?.match(/^Category:\s*([^\n]+)/)?.[1] ??
   "Business meeting";
+const isGenericBusinessMeetingSlot = (item: ScheduleItem) =>
+  /^business meetings?\s*\((morning|afternoon)\)$/i.test(item.title.trim());
+const isConferenceOrEvent = (item: ScheduleItem) =>
+  /\b(conference|summit|forum|expo|exhibition|event|workshop|hackathon|networking)\b/i.test(
+    item.title,
+  );
+const isPotentialBizMeet = (item: ScheduleItem) =>
+  item.itemType === "business_meeting" &&
+  !isGenericBusinessMeetingSlot(item) &&
+  !isConferenceOrEvent(item);
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -900,7 +910,7 @@ export default function App({
             <BusinessMeetingsPage
               items={visibleItems.filter(
                 (item) =>
-                  item.itemType === "business_meeting" &&
+                  isPotentialBizMeet(item) &&
                   meetingCategoryFor(item) !== "Business meeting",
               )}
               isAdmin={isAdmin}
@@ -1369,28 +1379,88 @@ function TutorialDialog({
   open: boolean;
   setOpen: (open: boolean) => void;
 }) {
+  const [selectedStep, setSelectedStep] = useState<number>();
+  const tutorialImages = ["df1.png", "df2.png", "df3.png", "df5.png"];
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-4xl">
-        <DialogTitle>How to use the programme board</DialogTitle>
-        <DialogDescription>
-          Five quick ways to interact with the app.
-        </DialogDescription>
-        <div className="mt-5 grid gap-5 sm:grid-cols-2">
-          {[1, 2, 3, 4, 5].map((step) => (
-            <figure key={step} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-              <img
-                src={`/tutorial/df${step}.png`}
-                alt={`Tutorial step ${step}`}
-                loading="lazy"
-                className="w-full bg-white"
-              />
-              <figcaption className="px-3 py-2 text-xs font-semibold text-slate-600">
-                Tutorial {step} of 5
-              </figcaption>
-            </figure>
-          ))}
-        </div>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setSelectedStep(undefined);
+      }}
+    >
+      <DialogContent className={selectedStep ? "max-w-[96vw] p-4" : "max-w-4xl"}>
+        {selectedStep ? (
+          <>
+            <div className="flex items-center justify-between gap-4 pr-10">
+              <button
+                type="button"
+                onClick={() => setSelectedStep(undefined)}
+                className="text-sm font-semibold text-indigo-700 hover:text-indigo-900"
+              >
+                ← All tutorials
+              </button>
+              <p className="text-xs font-bold text-slate-500">
+                Tutorial {selectedStep} of {tutorialImages.length}
+              </p>
+            </div>
+            <img
+              src={`/tutorial/${tutorialImages[selectedStep - 1]}`}
+              alt={`Tutorial step ${selectedStep}`}
+              className="mt-4 max-h-[78vh] w-full rounded-xl border border-slate-200 bg-white object-contain"
+            />
+            <div className="mt-3 flex justify-between gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={selectedStep === 1}
+                onClick={() => setSelectedStep((step) => (step ? step - 1 : step))}
+              >
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="indigo"
+                disabled={selectedStep === tutorialImages.length}
+                onClick={() => setSelectedStep((step) => (step ? step + 1 : step))}
+              >
+                Next
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <DialogTitle>How to use the programme board</DialogTitle>
+            <DialogDescription>
+              Four quick ways to interact with the app. Select an image to
+              focus and zoom in.
+            </DialogDescription>
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
+              {tutorialImages.map((image, index) => {
+                const step = index + 1;
+                return (
+                <button
+                  key={step}
+                  type="button"
+                  onClick={() => setSelectedStep(step)}
+                  className="group overflow-hidden rounded-xl border border-slate-200 bg-slate-50 text-left hover:border-indigo-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <img
+                    src={`/tutorial/${image}`}
+                    alt={`Open tutorial step ${step}`}
+                    loading="lazy"
+                    className="w-full bg-white transition duration-200 group-hover:scale-[1.02]"
+                  />
+                  <span className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-600">
+                    Tutorial {step} of {tutorialImages.length}
+                    <Maximize2 className="size-3.5" />
+                  </span>
+                </button>
+                );
+              })}
+            </div>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
