@@ -168,6 +168,36 @@ const uiText = {
   },
 } as const;
 
+const koreanUiText = {
+  ...uiText.en,
+  language: "\uD55C\uAD6D\uC5B4",
+  schedule: "\uC77C\uC815",
+  businessMeetings: "\uBE44\uC988\uB2C8\uC2A4 \uBBF8\uD305",
+  cohortDecisions: "\uCF54\uD638\uD2B8 \uACB0\uC815",
+  myDecisions: "\uB098\uC758 \uACB0\uC815",
+  venueLocation: "\uD589\uC0AC \uC7A5\uC18C",
+  toiletMap: "\uC601\uAD6D \uD654\uC7A5\uC2E4 \uC9C0\uB3C4",
+  externalLinks: "\uC678\uBD80 \uD589\uC0AC \uB9C1\uD06C",
+  addCompanyWork: "\uD68C\uC0AC \uC5C5\uBB34 \uCD94\uAC00",
+  organisers: "\uC8FC\uCD5C\uC790",
+  investorShowcase: "\uD22C\uC790\uC790 \uC1FC\uCF00\uC774\uC2A4",
+  collapse: "\uD328\uB110 \uC811\uAE30",
+  expand: "\uD328\uB110 \uD3BC\uCE58\uAE30",
+  programmeSchedule: "\uD504\uB85C\uADF8\uB7A8 \uC77C\uC815",
+  calendar: "\uCE98\uB9B0\uB354",
+  spreadsheet: "\uC2A4\uD504\uB808\uB4DC\uC2DC\uD2B8",
+  undo: "\uC2E4\uD589 \uCDE8\uC18C",
+  redo: "\uB2E4\uC2DC \uC2E4\uD589",
+  searchSchedule: "\uC77C\uC815 \uAC80\uC0C9",
+  createItem: "\uD56D\uBAA9 \uB9CC\uB4E4\uAE30",
+  proposeEvent: "\uD589\uC0AC \uC81C\uC548",
+  export: "\uB0B4\uBCF4\uB0B4\uAE30",
+  jumpToday: "\uC624\uB298\uB85C \uC774\uB3D9",
+  key: "\uBC94\uB840",
+  confirmed: "\uD655\uC815",
+  decisionPending: "\uACB0\uC815 \uB300\uAE30",
+} as const;
+
 const pretty = (value: string) =>
   value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const bookingLabel = (value: string) =>
@@ -1011,7 +1041,7 @@ function Sidebar({
   ) => void;
   onBusy: () => void;
 }) {
-  const copy = uiText[language];
+  const copy = language === "ko" ? koreanUiText : uiText.en;
   const nav = [
     { id: "calendar", label: copy.schedule, icon: CalendarDays },
     { id: "business-meetings", label: copy.businessMeetings, icon: Building2 },
@@ -1452,7 +1482,7 @@ function Topbar({
   onMenu: () => void;
 }) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const copy = uiText[language];
+  const copy = language === "ko" ? koreanUiText : uiText.en;
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200/90 bg-[#f7f7f4]/90 px-4 backdrop-blur sm:px-6 lg:px-8">
       <button
@@ -1596,7 +1626,7 @@ function ScheduleModeToggle({
   setMode: (mode: "calendar" | "spreadsheet") => void;
   language: Language;
 }) {
-  const copy = uiText[language];
+  const copy = language === "ko" ? koreanUiText : uiText.en;
   return (
     <div className="flex items-center rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
       {(
@@ -1711,7 +1741,7 @@ function CalendarHeader({
   onExport,
 }: any) {
   const [exportOpen, setExportOpen] = useState(false);
-  const copy = uiText[language as Language];
+  const copy = language === "ko" ? koreanUiText : uiText.en;
   return (
     <div className="mb-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -3009,7 +3039,7 @@ function BusinessMeetingsPage({
   onSelect: (id: string) => void;
   language: Language;
 }) {
-  const copy = uiText[language];
+  const copy = language === "ko" ? koreanUiText : uiText.en;
   const [adminSearch, setAdminSearch] = useState("");
   const categoryFor = (item: ScheduleItem) =>
     item.meetingCategory ??
