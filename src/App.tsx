@@ -143,7 +143,7 @@ const uiText = {
   en: {
     schedule: "Schedule",
     businessMeetings: "Potential Biz Meets",
-    cohortDecisions: "Cohort decisions",
+    cohortDecisions: "Cohort Retention",
     myDecisions: "My decisions",
     venueLocation: "Venue Location",
     toiletMap: "UK Toilet Map",
@@ -600,7 +600,9 @@ export default function App({
     const client = supabase;
     if (!productionMode || !client || profile.role === "lvnc_admin" || !profile.organisationId || recordedSession.current === profile.id) return;
     recordedSession.current = profile.id;
-    void client.from("app_activity_events").insert({ actor_id: profile.id, organisation_id: profile.organisationId, event_type: "session_started" });
+    void client.from("app_activity_events").insert({ actor_id: profile.id, organisation_id: profile.organisationId, event_type: "session_started" }).then(({ error }) => {
+      if (error) console.warn("Could not record programme access", error.message);
+    });
   }, [productionMode, profile.id, profile.role, profile.organisationId]);
 
   useEffect(() => {
@@ -632,7 +634,13 @@ export default function App({
       setEngagementInvites((inviteRows ?? []).map((row: any) => ({ email: row.email, fullName: row.full_name ?? undefined, role: row.role, organisationId: row.organisation_id ?? undefined })));
     };
     void loadEngagement();
-    return () => { disposed = true; };
+    const refreshTimer = window.setInterval(loadEngagement, 15000);
+    window.addEventListener("focus", loadEngagement);
+    return () => {
+      disposed = true;
+      window.clearInterval(refreshTimer);
+      window.removeEventListener("focus", loadEngagement);
+    };
   }, [page, productionMode, profile.role]);
 
   useEffect(() => {
@@ -4918,7 +4926,7 @@ function AdminDecisionsDashboard({
   return (
     <div>
       <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">LVCN control centre</p>
-      <h1 className="mt-1 text-3xl font-semibold tracking-tight">Cohort decisions</h1>
+      <h1 className="mt-1 text-3xl font-semibold tracking-tight">Cohort Retention</h1>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
         Monitor startup responses alongside company and user engagement throughout the programme.
       </p>
