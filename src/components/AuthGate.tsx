@@ -64,6 +64,26 @@ export function AuthGate({
     return () => listener.subscription.unsubscribe();
   }, [demoMode]);
 
+  // A profile held in React state is not enough to authorise REST requests.
+  // If a browser has lost its Supabase session, the client falls back to the
+  // public key and every RLS-protected request returns 401. Reconcile on focus
+  // so the user is returned to the access screen instead of seeing an empty
+  // programme board.
+  useEffect(() => {
+    const client = supabase;
+    if (demoMode || !client) return;
+    const verifySession = async () => {
+      const { data } = await client.auth.getSession();
+      if (data.session?.access_token) return;
+      setSession(null);
+      setProfile(undefined);
+      setReady(true);
+    };
+    void verifySession();
+    window.addEventListener("focus", verifySession);
+    return () => window.removeEventListener("focus", verifySession);
+  }, [demoMode]);
+
   if (demoMode) return children(undefined, false);
   if (!ready)
     return (

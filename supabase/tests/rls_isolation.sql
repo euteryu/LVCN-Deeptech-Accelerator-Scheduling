@@ -15,6 +15,18 @@ select organisation_id, schedule_item_id from public.schedule_item_organisations
 select id, title, status, visibility_scope from public.schedule_items;
 rollback;
 
+-- Partner observers can read published schedule/opportunity context, but must
+-- never inherit participant-private rows merely because their profile retains
+-- the PEN organisation id. Expected: zero rows from all four queries.
+begin;
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"PARTNER_OBSERVER_USER_UUID","role":"authenticated"}', true);
+select id from public.event_responses;
+select id from public.event_response_messages;
+select id from public.availability_blocks;
+select id from public.startup_updates;
+rollback;
+
 -- Run this separately. Expected: ERROR 42501, new row violates row-level security.
 begin;
 set local role authenticated;

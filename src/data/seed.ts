@@ -70,6 +70,13 @@ export const profiles: Profile[] = [
     role: "startup_member",
     organisationId: "11111111-1111-4111-8111-111111111111",
   },
+  {
+    id: "partner",
+    email: "observer@pen.ventures",
+    fullName: "PEN Ventures Observer",
+    role: "partner_observer",
+    organisationId: "99999999-9999-4999-8999-999999999990",
+  },
 ];
 
 const monday = startOfWeek(new Date(), { weekStartsOn: 1 });

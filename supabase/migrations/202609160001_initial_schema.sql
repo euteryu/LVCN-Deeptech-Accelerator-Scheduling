@@ -1,6 +1,6 @@
 create extension if not exists pgcrypto;
 
-create type public.app_role as enum ('startup_member', 'lvnc_admin');
+create type public.app_role as enum ('startup_member', 'lvnc_admin', 'partner_observer');
 create type public.item_type as enum ('lvnc_core', 'third_party', 'business_meeting', 'company_work');
 create type public.visibility_scope as enum ('cohort', 'selected_organisations');
 create type public.attendance_rule as enum ('compulsory', 'recommended', 'optional');

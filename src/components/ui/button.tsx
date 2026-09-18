@@ -11,6 +11,8 @@ const buttonVariants = cva(
         default: "bg-slate-950 text-white hover:bg-slate-800",
         secondary:
           "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+        outline:
+          "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
         ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
         destructive: "bg-rose-600 text-white hover:bg-rose-700",
         indigo: "bg-[#162c5b] text-white hover:bg-[#0f2045]",

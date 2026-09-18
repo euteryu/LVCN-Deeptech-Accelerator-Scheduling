@@ -1,4 +1,4 @@
-export type Role = "startup_member" | "lvnc_admin";
+export type Role = "startup_member" | "partner_observer" | "lvnc_admin";
 export type ItemType =
   | "lvnc_core"
   | "third_party"
@@ -28,6 +28,23 @@ export type TimePrecision =
   | "evening"
   | "all_day"
   | "unknown";
+export type AttendancePlan =
+  | "not_set"
+  | "full_event"
+  | "morning"
+  | "afternoon"
+  | "evening"
+  | "custom_time";
+export type ConversationStatus =
+  | "none"
+  | "awaiting_admin"
+  | "awaiting_startup"
+  | "resolved";
+export type AdminResponseStatus =
+  | "approved"
+  | "needs_details"
+  | "not_possible"
+  | "information";
 
 export interface Organisation {
   id: string;
@@ -42,10 +59,23 @@ export interface Profile {
   organisationId?: string;
 }
 export interface Response {
+  id?: string;
   organisationId: string;
   decision: Decision;
   note?: string;
   updatedAt: string;
+  adminReviewedAt?: string;
+  attendancePlan?: AttendancePlan;
+  attendanceStartsAt?: string;
+  attendanceEndsAt?: string;
+  conversationStatus?: ConversationStatus;
+  adminResponseStatus?: AdminResponseStatus;
+  messages?: Array<{
+    id: string;
+    body: string;
+    authorRole: Role;
+    createdAt: string;
+  }>;
 }
 export interface MeetingTarget {
   organisationId: string;
@@ -55,6 +85,8 @@ export interface MeetingTarget {
 }
 export interface ScheduleItem {
   id: string;
+  createdBy?: string;
+  createdOrganisationId?: string;
   title: string;
   description?: string;
   itemType: ItemType;
@@ -67,6 +99,7 @@ export interface ScheduleItem {
   location?: string;
   eventUrl?: string;
   registrationDeadline?: string;
+  reviewBy?: string;
   costType: "free" | "paid" | "not_applicable" | "unknown";
   costNote?: string;
   status: ItemStatus;
@@ -84,6 +117,7 @@ export interface ScheduleItem {
   meetingCategory?: string;
   meetingStatus?: string;
   contactName?: string;
+  contactEmail?: string;
   meetingNote?: string;
   meetingTargets?: MeetingTarget[];
   responses: Response[];
@@ -95,5 +129,39 @@ export interface AvailabilityBlock {
   note?: string;
   startsAt: string;
   endsAt: string;
+  adminReviewedAt?: string;
+}
+export type PotentialMeetingStatus = "draft" | "contacted" | "agreed" | "rejected" | "paused";
+export interface PotentialMeeting {
+  id: string;
+  organisationId: string;
+  institutionName: string;
+  category: string;
+  status: PotentialMeetingStatus;
+  proposedStartsAt?: string;
+  proposedEndsAt?: string;
+  location?: string;
+  externalUrl?: string;
+  startupVisibleNote?: string;
+  nextAction?: string;
+  contactName?: string;
+  contactEmail?: string;
+  internalNote?: string;
+  decision: Decision;
+  decisionNote?: string;
+  priorityRating?: 1 | 2 | 3;
+  adminReviewedAt?: string;
+}
+export type StartupUpdateKind = "schedule" | "potential_biz_meet" | "admin_message";
+export interface StartupUpdate {
+  id: string;
+  organisationId: string;
+  kind: StartupUpdateKind;
+  title: string;
+  body?: string;
+  scheduleItemId?: string;
+  potentialMeetingId?: string;
+  createdAt: string;
+  readAt?: string;
 }
 export type ViewMode = "week" | "day" | "month";
