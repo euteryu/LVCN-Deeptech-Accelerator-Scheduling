@@ -4862,6 +4862,7 @@ function LegacyBusinessMeetingsPage({
 
 function AdminDecisionsDashboard({
   items,
+  potentialMeetings,
   engagementEvents,
   engagementIdentities,
   engagementInvites,
@@ -4869,6 +4870,7 @@ function AdminDecisionsDashboard({
   onOpenSchedule,
 }: {
   items: ScheduleItem[];
+  potentialMeetings: PotentialMeeting[];
   engagementEvents: EngagementAccessEvent[];
   engagementIdentities: EngagementIdentity[];
   engagementInvites: EngagementInvite[];
@@ -4884,14 +4886,22 @@ function AdminDecisionsDashboard({
       ?.decision ?? "undecided";
   const appliesTo = (item: ScheduleItem, organisationId: string) =>
     item.visibilityScope === "cohort" || item.organisationIds.includes(organisationId);
+  const breakdown = (decisions: Decision[]) => ({
+    pending: decisions.filter((decision) => ["undecided", "interested"].includes(decision)).length,
+    accepted: decisions.filter((decision) => ["going", "acknowledged"].includes(decision)).length,
+    rejected: decisions.filter((decision) => decision === "pass").length,
+  });
   const startupRows = organisations.map((organisation) => {
     const assigned = actionable.filter((item) => appliesTo(item, organisation.id));
     const decisions = assigned.map((item) => decisionFor(item, organisation.id));
+    const potential = potentialMeetings.filter((meeting) => meeting.organisationId === organisation.id);
     return {
       organisation,
-      pending: decisions.filter((decision) => ["undecided", "interested"].includes(decision)).length,
-      confirmed: decisions.filter((decision) => ["going", "acknowledged"].includes(decision)).length,
-      rejected: decisions.filter((decision) => decision === "pass").length,
+      schedule: breakdown(decisions),
+      potential: breakdown(potential.map((meeting) => meeting.decision)),
+      pending: breakdown(decisions).pending + breakdown(potential.map((meeting) => meeting.decision)).pending,
+      confirmed: breakdown(decisions).accepted + breakdown(potential.map((meeting) => meeting.decision)).accepted,
+      rejected: breakdown(decisions).rejected + breakdown(potential.map((meeting) => meeting.decision)).rejected,
       total: assigned.length,
     };
   });
@@ -4926,23 +4936,23 @@ function AdminDecisionsDashboard({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="font-semibold">Startup response board</h2>
-            <p className="mt-1 text-xs text-slate-500">Counts are per startup, across the items visible to that startup.</p>
+            <p className="mt-1 text-xs text-slate-500">Counts are split between schedule rows and dedicated Potential Biz Meet decisions.</p>
           </div>
           <Button type="button" variant="secondary" onClick={onOpenSchedule}>Open master schedule</Button>
         </div>
         <div className="mt-4 overflow-x-auto">
-          <table className="min-w-[620px] w-full text-left text-sm">
+          <table className="min-w-[980px] w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[.1em] text-slate-500">
-              <tr><th className="px-3 py-2">Startup</th><th className="px-3 py-2 text-right">Pending</th><th className="px-3 py-2 text-right">Confirmed</th><th className="px-3 py-2 text-right">Rejected</th><th className="px-3 py-2 text-right">Assigned</th></tr>
+              <tr><th className="px-3 py-2">Startup</th><th className="px-3 py-2 text-right">Schedule rows<br /><span className="font-medium normal-case tracking-normal">pending · accepted · rejected</span></th><th className="px-3 py-2 text-right">Potential Biz Meets<br /><span className="font-medium normal-case tracking-normal">pending · accepted · rejected</span></th><th className="px-3 py-2 text-right">All pending</th><th className="px-3 py-2 text-right">All actioned</th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {[...startupRows].sort((left, right) => right.pending - left.pending).map((row) => (
                 <tr key={row.organisation.id}>
                   <td className="px-3 py-2.5 font-semibold">{row.organisation.name}</td>
+                  <DecisionCell breakdown={row.schedule} />
+                  <DecisionCell breakdown={row.potential} />
                   <td className="px-3 py-2.5 text-right font-bold text-amber-700">{row.pending}</td>
-                  <td className="px-3 py-2.5 text-right text-emerald-700">{row.confirmed}</td>
-                  <td className="px-3 py-2.5 text-right text-slate-600">{row.rejected}</td>
-                  <td className="px-3 py-2.5 text-right text-slate-500">{row.total}</td>
+                  <td className="px-3 py-2.5 text-right font-semibold text-emerald-700">{row.confirmed + row.rejected}</td>
                 </tr>
               ))}
             </tbody>
@@ -4952,6 +4962,10 @@ function AdminDecisionsDashboard({
       <AdminEngagementPanel events={engagementEvents} identities={engagementIdentities} invites={engagementInvites} organisationNames={organisationNames} />
     </div>
   );
+}
+
+function DecisionCell({ breakdown }: { breakdown: { pending: number; accepted: number; rejected: number } }) {
+  return <td className="px-3 py-2.5 text-right"><span className="font-bold text-amber-700">{breakdown.pending}</span><span className="mx-1 text-slate-300">·</span><span className="font-semibold text-emerald-700">{breakdown.accepted}</span><span className="mx-1 text-slate-300">·</span><span className="text-slate-600">{breakdown.rejected}</span></td>;
 }
 
 function DecisionsPage({
@@ -4981,6 +4995,7 @@ function DecisionsPage({
     return (
       <AdminDecisionsDashboard
         items={items}
+        potentialMeetings={potentialMeetings}
         engagementEvents={engagementEvents}
         engagementIdentities={engagementIdentities}
         engagementInvites={engagementInvites}
