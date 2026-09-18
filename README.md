@@ -2,6 +2,8 @@
 
 A private, short-lived scheduling and decision app for LVCN's Korea-UK startup cohort. It replaces per-company spreadsheets with a shared operational calendar while keeping every startup's targeting, responses, notes, and availability isolated from the other startups.
 
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for role boundaries, module ownership, and the change checklist used to keep future work maintainable.
+
 ## What is included
 
 - Week, day, and agenda views with mobile-first agenda behaviour

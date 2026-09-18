@@ -80,8 +80,29 @@ import {
 } from "./components/ui/dialog";
 import { cn } from "./lib/utils";
 import { supabase } from "./lib/supabase";
-import { firstRelated } from "./lib/relation";
 import { canManageCompanyProposal } from "./lib/access";
+import { DatePickerField, FieldLabel, Input, Select } from "./components/form-controls";
+import { ExternalEventsPage, LocationPage, OrganisersPage, ToiletMapPage } from "./components/programme-info-pages";
+import { meetingTargetValues, scheduleItemValues } from "./lib/schedule-persistence";
+import {
+  bookingLabel,
+  calendarState,
+  isGenericBusinessMeetingSlot,
+  isSupersededDeepFusionMeeting,
+  meetingCategoryFor,
+  nextWorkingDay,
+  overlaps,
+  pretty,
+  safeDate,
+  scheduleDecisionState,
+  spreadsheetTypeFor,
+} from "./lib/schedule-domain";
+import {
+  mapAvailabilityRow,
+  mapPotentialMeetingRow,
+  mapScheduleItemRow,
+  mapStartupUpdateRow,
+} from "./lib/supabase-mappers";
 
 const itemMeta: Record<
   ItemType,
@@ -213,112 +234,12 @@ const koreanUiText = {
     "\uC544\uB798\uC758 \uAE30\uAD00 \uB610\uB294 \uB2F4\uB2F9\uC790\uB97C \uC120\uD0DD\uD558\uBA74 \uC0C1\uC138 \uC815\uBCF4\uC640, \uC81C\uACF5\uB418\uB294 \uACBD\uC6B0 \uC678\uBD80 \uD504\uB85C\uD544 \uB610\uB294 \uD589\uC0AC \uB9C1\uD06C\uB97C \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
 } as const;
 
-const pretty = (value: string) =>
-  value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-const bookingLabel = (value: string) =>
-  value === "not_required" ? "Free attendance" : pretty(value);
 const dateLabel = (item: ScheduleItem) =>
   item.startsAt
     ? item.timePrecision === "all_day"
       ? `${format(new Date(item.startsAt), "EEE d MMM")} · All day`
       : format(new Date(item.startsAt), "EEE d MMM · HH:mm")
     : "Time to confirm";
-const overlaps = (
-  startA: string,
-  endA: string,
-  startB?: string,
-  endB?: string,
-) =>
-  Boolean(
-    startB &&
-      endB &&
-      new Date(startA) < new Date(endB) &&
-      new Date(endA) > new Date(startB),
-  );
-const validTimestamp = (value: unknown) => {
-  if (typeof value !== "string" || !value.trim()) return undefined;
-  const parsed = new Date(value);
-  // Canonicalise accepted database values too. This keeps date-fns away from
-  // non-standard but browser-parseable timestamp strings from spreadsheet
-  // imports (the source of the production render failure).
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
-};
-const safeDate = (value?: string | Date) => {
-  const parsed = value instanceof Date ? value : new Date(value ?? "");
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-};
-const scheduleItemValues = (item: ScheduleItem) => ({
-  title: item.title,
-  description: item.description || null,
-  item_type: item.itemType,
-  visibility_scope: item.visibilityScope,
-  attendance_rule: item.attendanceRule,
-  starts_at: item.startsAt || null,
-  ends_at: item.endsAt || null,
-  time_precision: item.timePrecision,
-  location: item.location || null,
-  event_url: item.eventUrl || null,
-  registration_deadline: item.registrationDeadline || null,
-  review_by: item.reviewBy || null,
-  cost_type: item.costType,
-  cost_note: item.costNote || null,
-  status: item.status,
-  booking_status: item.bookingStatus,
-  priority: item.priority,
-  fit: item.fit || null,
-  next_action: item.nextAction || null,
-  source_note: item.sourceNote || null,
-  meeting_category: item.meetingCategory || null,
-  meeting_status: item.meetingStatus || null,
-  contact_name: item.contactName || null,
-  meeting_note: item.meetingNote || null,
-});
-const meetingTargetValues = (item: ScheduleItem, organisationId: string) => {
-  const target = item.meetingTargets?.find(
-    (entry) => entry.organisationId === organisationId,
-  );
-  return {
-    schedule_item_id: item.id,
-    organisation_id: organisationId,
-    meeting_outreach_status: target?.outreachStatus ?? "Contacted",
-    availability_note: target?.availabilityNote || null,
-    coordination_note: target?.coordinationNote || null,
-  };
-};
-const calendarState = (item: ScheduleItem, decision?: Decision) =>
-  item.status === "confirmed" ||
-  ["going", "acknowledged"].includes(decision ?? "")
-    ? "border-emerald-300 bg-emerald-50"
-    : "border-dashed border-amber-300 bg-amber-50/50";
-const nextWorkingDay = (date: Date, direction: 1 | -1) => {
-  let next = addDays(date, direction);
-  while (next.getDay() === 0 || next.getDay() === 6)
-    next = addDays(next, direction);
-  return next;
-};
-const meetingCategoryFor = (item: ScheduleItem) =>
-  item.meetingCategory ??
-  item.description?.match(/^Category:\s*([^\n]+)/)?.[1] ??
-  "Business meeting";
-const genericBusinessMeetingTitle = /^busines{1,2}\s+meetings?\b/i;
-const isGenericBusinessMeetingSlot = (item: ScheduleItem) =>
-  genericBusinessMeetingTitle.test(item.title.trim());
-const normaliseGenericBusinessMeetingTitle = (title: string) =>
-  title.replace(genericBusinessMeetingTitle, "Business Meetings");
-// A schedule item's saved type is authoritative. In particular, LVCN programme
-// workshops must not be rendered as third-party events simply because of a word
-// in their title.
-const spreadsheetTypeFor = (item: ScheduleItem): ItemType => item.itemType;
-const scheduleDecisionState = (item: ScheduleItem, organisationId?: string) => {
-  const responses = organisationId
-    ? item.responses.filter((response) => response.organisationId === organisationId)
-    : item.responses;
-  if (responses.some((response) => ["going", "acknowledged"].includes(response.decision))) return "confirmed";
-  if (responses.length > 0 && responses.every((response) => response.decision === "pass")) return "rejected";
-  return "pending";
-};
-const isSupersededDeepFusionMeeting = (item: ScheduleItem) =>
-  item.title.trim().toLowerCase() === "md one";
 
 // Keep detailed source labels on each record, while grouping them into a
 // compact, startup-friendly taxonomy for the Potential Biz Meets filters.
@@ -471,93 +392,6 @@ const officialExternalLinkFor = (item: ScheduleItem) => {
   return item.eventUrl || officialExternalLinks[normalisedTitle];
 };
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <label className="mb-1.5 block text-xs font-bold uppercase tracking-[.12em] text-slate-500">
-      {children}
-    </label>
-  );
-}
-function Select({
-  className,
-  ...props
-}: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <div className={cn("relative", className)}>
-      <select
-        {...props}
-        className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white py-0 pl-3 pr-9 text-sm font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-      />
-      <ChevronDown className="pointer-events-none absolute right-3 top-3 size-4 text-slate-400" />
-    </div>
-  );
-}
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      {...props}
-      className={cn(
-        "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100",
-        props.className,
-      )}
-    />
-  );
-}
-
-function DatePickerField({
-  value,
-  onChange,
-  ariaLabel,
-  min,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  ariaLabel: string;
-  min?: string;
-}) {
-  const selected = value ? new Date(`${value}T12:00:00`) : undefined;
-  const [open, setOpen] = useState(false);
-  const [month, setMonth] = useState(() => selected ?? new Date());
-  const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
-  const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 });
-  const minDate = min ? new Date(`${min}T00:00:00`) : undefined;
-  const days = Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
-  const chooseDay = (day: Date) => {
-    if (minDate && day < minDate) return;
-    onChange(format(day, "yyyy-MM-dd"));
-    setMonth(day);
-    setOpen(false);
-  };
-  return (
-    <div className="relative">
-      <button type="button" aria-label={ariaLabel} onClick={() => setOpen((current) => !current)} className="flex h-10 w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-medium text-slate-700 outline-none transition hover:border-slate-300 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100">
-        <span className={value ? "text-slate-800" : "text-slate-400"}>{selected ? format(selected, "EEE, d MMM yyyy") : "Choose a date"}</span>
-        <CalendarDays className="size-4 text-slate-400" />
-      </button>
-      {open && (
-        <div className="absolute z-50 mt-2 w-[19.5rem] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
-          <div className="mb-3 flex items-center justify-between">
-            <button type="button" aria-label="Previous month" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ArrowLeft className="size-4" /></button>
-            <p className="text-sm font-bold text-slate-900">{format(monthStart, "MMMM yyyy")}</p>
-            <button type="button" aria-label="Next month" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ArrowRight className="size-4" /></button>
-          </div>
-          <div className="grid grid-cols-7 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400">
-            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day} className="py-1">{day}</span>)}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {days.map((day) => {
-              const disabled = (minDate && day < minDate) || day.getMonth() !== month.getMonth();
-              const active = Boolean(selected && isSameDay(day, selected));
-              return <button key={day.toISOString()} type="button" disabled={disabled} onClick={() => chooseDay(day)} className={cn("h-9 rounded-lg text-sm transition", active ? "bg-[#162c5b] font-bold text-white" : "text-slate-700 hover:bg-indigo-50", disabled && "cursor-not-allowed text-slate-300 hover:bg-transparent")}>{format(day, "d")}</button>;
-            })}
-          </div>
-          <button type="button" onClick={() => { const today = new Date(); chooseDay(today); }} className="mt-3 w-full rounded-lg border border-slate-200 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">Today</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function App({
   initialProfile,
   productionMode = false,
@@ -689,7 +523,7 @@ export default function App({
         client.from("app_section_visibility").select("section_id,visible_to_startups"),
         client
           .from("potential_meetings")
-          .select("*, potential_meeting_admin_details(contact_name,contact_email,internal_note), potential_meeting_decisions(decision,note,admin_reviewed_at)")
+          .select("*, potential_meeting_admin_details(contact_name,contact_email,internal_note), potential_meeting_decisions(decision,note,priority_rating,admin_reviewed_at)")
           .order("institution_name"),
         client.from("business_meeting_column_visibility").select("column_id,visible_to_startups"),
       ]);
@@ -717,100 +551,15 @@ export default function App({
       if (!columnVisibilityError) {
         setHiddenBusinessMeetingColumns((columnRows ?? []).filter((row: any) => !row.visible_to_startups).map((row: any) => row.column_id));
       }
-      setPotentialMeetings((potentialRows ?? []).map((row: any) => ({
-        id: row.id, organisationId: row.organisation_id, institutionName: row.institution_name,
-        category: row.category, status: row.status, proposedStartsAt: validTimestamp(row.proposed_starts_at),
-        proposedEndsAt: validTimestamp(row.proposed_ends_at), location: row.location ?? undefined,
-        externalUrl: row.external_url ?? `https://www.google.com/search?q=${encodeURIComponent(row.institution_name)}`, startupVisibleNote: row.startup_visible_note ?? undefined,
-        nextAction: row.next_action ?? undefined, contactName: firstRelated<any>(row.potential_meeting_admin_details)?.contact_name,
-        contactEmail: firstRelated<any>(row.potential_meeting_admin_details)?.contact_email,
-        internalNote: firstRelated<any>(row.potential_meeting_admin_details)?.internal_note,
-        decision: firstRelated<any>(row.potential_meeting_decisions)?.decision ?? "undecided",
-        decisionNote: firstRelated<any>(row.potential_meeting_decisions)?.note ?? undefined,
-        priorityRating: firstRelated<any>(row.potential_meeting_decisions)?.priority_rating ?? undefined,
-        adminReviewedAt: firstRelated<any>(row.potential_meeting_decisions)?.admin_reviewed_at ?? undefined,
-      })));
+      setPotentialMeetings((potentialRows ?? []).map(mapPotentialMeetingRow));
       if (updatesResult.error) {
         setUpdatesSchemaReady(false);
         setStartupUpdates([]);
       } else {
         setUpdatesSchemaReady(true);
-        setStartupUpdates((updatesResult.data ?? []).map((row: any) => ({
-          id: row.id, organisationId: row.organisation_id, kind: row.kind, title: row.title,
-          body: row.body ?? undefined, scheduleItemId: row.schedule_item_id ?? undefined,
-          potentialMeetingId: row.potential_meeting_id ?? undefined, createdAt: row.created_at,
-          readAt: row.read_at ?? undefined,
-        })));
+        setStartupUpdates((updatesResult.data ?? []).map(mapStartupUpdateRow));
       }
-      setItems(
-        (scheduleResult.data ?? []).map((row: any) => ({
-          id: row.id,
-          createdBy: row.created_by ?? undefined,
-          createdOrganisationId: row.created_organisation_id ?? undefined,
-          title: normaliseGenericBusinessMeetingTitle(row.title),
-          description: row.description ?? undefined,
-          itemType: row.item_type,
-          visibilityScope: row.visibility_scope,
-          organisationIds: row.schedule_item_organisations.map(
-            (entry: any) => entry.organisation_id,
-          ),
-          attendanceRule: row.attendance_rule,
-          // Imported sheets can contain placeholders such as "TBC" in a
-          // timestamp column. Do not let one malformed row take down the
-          // whole board; render it as "Time to confirm" instead.
-          startsAt: validTimestamp(row.starts_at),
-          endsAt: validTimestamp(row.ends_at),
-          timePrecision: row.time_precision,
-          location: row.location ?? undefined,
-          eventUrl: row.event_url ?? row.meeting_link ?? undefined,
-          registrationDeadline: row.registration_deadline ?? undefined,
-          reviewBy: row.review_by ?? undefined,
-          costType: row.cost_type,
-          costNote: row.cost_note ?? undefined,
-          status: row.status,
-          bookingStatus: row.booking_status,
-          priority: row.priority,
-          fit: row.fit ?? undefined,
-          nextAction: row.next_action ?? undefined,
-          sourceNote: row.source_note ?? undefined,
-          meetingCategory: row.meeting_category ?? undefined,
-          meetingStatus: row.meeting_status ?? undefined,
-          contactName: row.contact_name ?? undefined,
-          contactEmail: row.contact_email ?? undefined,
-          meetingNote: row.meeting_note ?? undefined,
-          meetingTargets: row.schedule_item_organisations.map((entry: any) => ({
-            organisationId: entry.organisation_id,
-            outreachStatus:
-              entry.meeting_outreach_status === "Agreed" ||
-              entry.meeting_outreach_status === "Rejected"
-                ? entry.meeting_outreach_status
-                : "Contacted",
-            availabilityNote: entry.availability_note ?? undefined,
-            coordinationNote: entry.coordination_note ?? undefined,
-          })),
-          conflictGroupId:
-            row.schedule_item_conflict_groups[0]?.conflict_group_id,
-          responses: row.event_responses.map((response: any) => ({
-            id: response.id,
-            organisationId: response.organisation_id,
-            decision: response.decision,
-            note: response.note ?? undefined,
-            updatedAt: response.updated_at,
-            adminReviewedAt: response.admin_reviewed_at ?? undefined,
-            attendancePlan: response.attendance_plan ?? "not_set",
-            attendanceStartsAt: response.attendance_starts_at ?? undefined,
-            attendanceEndsAt: response.attendance_ends_at ?? undefined,
-            conversationStatus: response.conversation_status ?? "none",
-            adminResponseStatus: response.admin_response_status ?? undefined,
-            messages: (response.event_response_messages ?? []).map((message: any) => ({
-              id: message.id,
-              body: message.body,
-              authorRole: message.author_role,
-              createdAt: message.created_at,
-            })).sort((a: any, b: any) => a.createdAt.localeCompare(b.createdAt)),
-          })),
-        })),
-      );
+      setItems((scheduleResult.data ?? []).map(mapScheduleItemRow));
       setHiddenMeetingCategories(
         (categoryRows ?? [])
           .filter((row: any) => !row.visible_to_startups)
@@ -821,23 +570,10 @@ export default function App({
           .filter((row: any) => !row.visible_to_startups)
           .map((row: any) => row.section_id),
       );
-      setAvailability(
-        (availabilityRows ?? []).flatMap((row: any) => {
-          const startsAt = validTimestamp(row.starts_at);
-          const endsAt = validTimestamp(row.ends_at);
-          return startsAt && endsAt
-            ? [{
-                id: row.id,
-                organisationId: row.organisation_id,
-              title: row.title,
-              note: row.note ?? undefined,
-              startsAt,
-              endsAt,
-              adminReviewedAt: row.admin_reviewed_at ?? undefined,
-              }]
-            : [];
-        }),
-      );
+      setAvailability((availabilityRows ?? []).flatMap((row: any) => {
+        const mapped = mapAvailabilityRow(row);
+        return mapped ? [mapped] : [];
+      }));
       void client.from("organisations").select("id,name").then(({ data }) => {
         if (data && !disposed) setOrganisationNames(Object.fromEntries(data.map((row: any) => [row.id, row.name])));
       });
@@ -2317,105 +2053,6 @@ function TutorialDialog({
   );
 }
 
-function OrganisersPage() {
-  const links = [
-    [
-      "KISED",
-      "https://www.kised.or.kr/_eng/",
-      "Korea Institute of Startup & Entrepreneurship Development. Supports startup growth, entrepreneurship, commercialisation and global expansion.",
-    ],
-    [
-      "PEN Ventures",
-      "https://pen.ventures/",
-      "Connects partners and supports innovative ideas as they launch and grow.",
-    ],
-    [
-      "LVCN",
-      "https://www.lvcn.co.uk/",
-      "London Venture Capital Network connects founders, investors and the wider innovation ecosystem.",
-    ],
-    [
-      "SVC Investor Showcase",
-      "https://luma.com/koreavc",
-      "A focused investor-facing programme moment for the participating SVC companies.",
-    ],
-  ];
-  return (
-    <div className="mx-auto max-w-6xl pb-8">
-      <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">
-        SVC programme
-      </p>
-      <h1 className="mt-1 text-3xl font-semibold tracking-tight">Investor Showcase</h1>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">Meet the organisations behind the programme and access the SVC Investor Showcase. Each link opens the relevant organisation or event in a new tab.</p>
-      <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {links.map(([name, url, description], index) => (
-          <a
-            key={name}
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className={cn("group flex min-h-52 flex-col rounded-2xl border p-5 shadow-[0_1px_2px_rgba(15,23,42,.03)] transition hover:-translate-y-0.5 hover:shadow-md", index === links.length - 1 ? "border-indigo-300 bg-gradient-to-br from-indigo-700 to-[#162c5b] text-white" : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50")}
-          >
-            <div className={cn("flex size-10 items-center justify-center rounded-xl", index === links.length - 1 ? "bg-white/15" : "bg-indigo-50 text-indigo-700")}><Building2 className="size-5" /></div>
-            <p className="mt-5 font-semibold">
-              {name}<ExternalLink className="ml-2 inline size-4 transition group-hover:translate-x-0.5" />
-            </p>
-            <p className={cn("mt-2 text-sm leading-6", index === links.length - 1 ? "text-indigo-100" : "text-slate-600")}>
-              {description}
-            </p>
-            <span className={cn("mt-auto pt-5 text-xs font-bold", index === links.length - 1 ? "text-white" : "text-indigo-700")}>Open link</span>
-          </a>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function LocationPage() {
-  const [copied, setCopied] = useState(false);
-  const address = "77 Fulham Palace Road, The Foundry, London W6 8AF";
-  return (
-    <div>
-      <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">
-        Venue location
-      </p>
-      <h1 className="mt-1 text-3xl font-semibold">Hammersmith The Foundry</h1>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-        Our programme base offers premium offices and coworking space close to
-        Charing Cross Hospital and Hammersmith Town Hall, with Kings Mall and
-        the Lyric Hammersmith nearby. It is a practical, collaborative base for
-        the London programme.
-      </p>
-      <button
-        onClick={() => {
-          void navigator.clipboard.writeText(address);
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1800);
-        }}
-        className="mt-6 rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-4 text-left font-semibold text-indigo-900"
-      >
-        {address}
-        <span className="mt-1 block text-xs font-medium text-indigo-600">
-          {copied ? "Copied" : "Click to copy address"}
-        </span>
-      </button>
-      <a
-        href="https://www.spacesworks.com/en/gb/4699"
-        target="_blank"
-        rel="noreferrer"
-        className="ml-3 inline-flex rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-800 hover:bg-teal-100"
-      >
-        Venue details <ExternalLink className="ml-2 size-4" />
-      </a>
-      <iframe
-        title="Hammersmith The Foundry map"
-        className="mt-6 h-[420px] w-full rounded-2xl border"
-        src="https://www.google.com/maps?q=77%20Fulham%20Palace%20Road%20London%20W6%208AF&output=embed"
-      />
-    </div>
-  );
-}
-
 type HotelRecommendation = {
   name: string;
   address: string;
@@ -2555,141 +2192,6 @@ function HotelRecommendationsPage({ language }: { language: Language }) {
             </article>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-function ToiletMapPage() {
-  const links = [
-    [
-      "The Great British Public Toilet Map",
-      "https://www.toiletmap.org.uk/",
-      "Nationwide public and community toilet finder.",
-    ],
-    [
-      "Spend a Penny",
-      "https://www.spendapenny.uk/",
-      "Nearby toilets with opening and accessibility information.",
-    ],
-    [
-      "Where To Wee",
-      "https://wheretowee.uk/free-public-toilets",
-      "Free public conveniences and accessible facilities.",
-    ],
-  ];
-  const cardStyles = [
-    "border-teal-200 bg-teal-50 text-teal-900 hover:bg-teal-100",
-    "border-indigo-200 bg-indigo-50 text-indigo-900 hover:bg-indigo-100",
-    "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100",
-  ];
-  return (
-    <div>
-      <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">
-        Useful on the move
-      </p>
-      <h1 className="mt-1 text-3xl font-semibold">UK Toilet Map</h1>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-        Find nearby public, community, and accessible toilets while travelling
-        between programme events.
-      </p>
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        {links.map(([name, url, description], index) => (
-          <a
-            key={name}
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className={cn(
-              "rounded-2xl border p-5 transition",
-              cardStyles[index],
-            )}
-          >
-            <p className="font-semibold">
-              {name}
-              <ExternalLink className="ml-2 inline size-4" />
-            </p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              {description}
-            </p>
-          </a>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ExternalEventsPage() {
-  const links = [
-    ["Luma", "https://lu.ma/", "Founder, technology, and community events."],
-    [
-      "Partiful",
-      "https://partiful.com/",
-      "Community and social event discovery.",
-    ],
-    [
-      "Meetup",
-      "https://www.meetup.com/",
-      "Local groups, founder meetups, and workshops.",
-    ],
-    [
-      "CodeNode",
-      "https://www.codenode.com/",
-      "London technology-community events and workspace.",
-    ],
-    [
-      "Entrepreneurs Collective",
-      "https://www.entrepreneurscollective.biz/calendar/",
-      "Founder, investor, and pitch events.",
-    ],
-    [
-      "Eventbrite",
-      "https://www.eventbrite.co.uk/",
-      "Broad event and ticket listings.",
-    ],
-    [
-      "Tech.eu",
-      "https://tech.eu/events/",
-      "European technology ecosystem events.",
-    ],
-  ];
-  const cardStyles = [
-    "border-indigo-200 bg-indigo-50 text-indigo-900 hover:bg-indigo-100",
-    "border-rose-200 bg-rose-50 text-rose-900 hover:bg-rose-100",
-    "border-teal-200 bg-teal-50 text-teal-900 hover:bg-teal-100",
-    "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100",
-  ];
-  return (
-    <div>
-      <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">
-        Discovery resources
-      </p>
-      <h1 className="mt-1 text-3xl font-semibold">External event links</h1>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-        Useful sources for finding opportunities to review before adding them to
-        the programme schedule.
-      </p>
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {links.map(([name, url, description], index) => (
-          <a
-            key={name}
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className={cn(
-              "rounded-2xl border p-5 transition",
-              cardStyles[index % cardStyles.length],
-            )}
-          >
-            <p className="font-semibold">
-              {name}
-              <ExternalLink className="ml-2 inline size-4" />
-            </p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              {description}
-            </p>
-          </a>
-        ))}
       </div>
     </div>
   );

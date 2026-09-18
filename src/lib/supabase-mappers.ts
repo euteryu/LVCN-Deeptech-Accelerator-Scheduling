@@ -1,0 +1,137 @@
+import type {
+  AvailabilityBlock,
+  PotentialMeeting,
+  ScheduleItem,
+  StartupUpdate,
+} from "../types";
+import { firstRelated } from "./relation";
+import {
+  normaliseGenericBusinessMeetingTitle,
+  validTimestamp,
+} from "./schedule-domain";
+
+type DatabaseRow = Record<string, any>;
+
+export function mapPotentialMeetingRow(row: DatabaseRow): PotentialMeeting {
+  const adminDetails = firstRelated<DatabaseRow>(row.potential_meeting_admin_details);
+  const decision = firstRelated<DatabaseRow>(row.potential_meeting_decisions);
+
+  return {
+    id: row.id,
+    organisationId: row.organisation_id,
+    institutionName: row.institution_name,
+    category: row.category,
+    status: row.status,
+    proposedStartsAt: validTimestamp(row.proposed_starts_at),
+    proposedEndsAt: validTimestamp(row.proposed_ends_at),
+    location: row.location ?? undefined,
+    externalUrl: row.external_url ?? `https://www.google.com/search?q=${encodeURIComponent(row.institution_name)}`,
+    startupVisibleNote: row.startup_visible_note ?? undefined,
+    nextAction: row.next_action ?? undefined,
+    contactName: adminDetails?.contact_name ?? undefined,
+    contactEmail: adminDetails?.contact_email ?? undefined,
+    internalNote: adminDetails?.internal_note ?? undefined,
+    decision: decision?.decision ?? "undecided",
+    decisionNote: decision?.note ?? undefined,
+    priorityRating: decision?.priority_rating ?? undefined,
+    adminReviewedAt: decision?.admin_reviewed_at ?? undefined,
+  };
+}
+
+export function mapStartupUpdateRow(row: DatabaseRow): StartupUpdate {
+  return {
+    id: row.id,
+    organisationId: row.organisation_id,
+    kind: row.kind,
+    title: row.title,
+    body: row.body ?? undefined,
+    scheduleItemId: row.schedule_item_id ?? undefined,
+    potentialMeetingId: row.potential_meeting_id ?? undefined,
+    createdAt: row.created_at,
+    readAt: row.read_at ?? undefined,
+  };
+}
+
+export function mapScheduleItemRow(row: DatabaseRow): ScheduleItem {
+  const organisations = row.schedule_item_organisations ?? [];
+  const responses = row.event_responses ?? [];
+
+  return {
+    id: row.id,
+    createdBy: row.created_by ?? undefined,
+    createdOrganisationId: row.created_organisation_id ?? undefined,
+    title: normaliseGenericBusinessMeetingTitle(row.title),
+    description: row.description ?? undefined,
+    itemType: row.item_type,
+    visibilityScope: row.visibility_scope,
+    organisationIds: organisations.map((entry: DatabaseRow) => entry.organisation_id),
+    attendanceRule: row.attendance_rule,
+    startsAt: validTimestamp(row.starts_at),
+    endsAt: validTimestamp(row.ends_at),
+    timePrecision: row.time_precision,
+    location: row.location ?? undefined,
+    eventUrl: row.event_url ?? row.meeting_link ?? undefined,
+    registrationDeadline: row.registration_deadline ?? undefined,
+    reviewBy: row.review_by ?? undefined,
+    costType: row.cost_type,
+    costNote: row.cost_note ?? undefined,
+    status: row.status,
+    bookingStatus: row.booking_status,
+    priority: row.priority,
+    fit: row.fit ?? undefined,
+    nextAction: row.next_action ?? undefined,
+    sourceNote: row.source_note ?? undefined,
+    meetingCategory: row.meeting_category ?? undefined,
+    meetingStatus: row.meeting_status ?? undefined,
+    contactName: row.contact_name ?? undefined,
+    contactEmail: row.contact_email ?? undefined,
+    meetingNote: row.meeting_note ?? undefined,
+    meetingTargets: organisations.map((entry: DatabaseRow) => ({
+      organisationId: entry.organisation_id,
+      outreachStatus:
+        entry.meeting_outreach_status === "Agreed" || entry.meeting_outreach_status === "Rejected"
+          ? entry.meeting_outreach_status
+          : "Contacted",
+      availabilityNote: entry.availability_note ?? undefined,
+      coordinationNote: entry.coordination_note ?? undefined,
+    })),
+    conflictGroupId: row.schedule_item_conflict_groups?.[0]?.conflict_group_id,
+    responses: responses.map((response: DatabaseRow) => ({
+      id: response.id,
+      organisationId: response.organisation_id,
+      decision: response.decision,
+      note: response.note ?? undefined,
+      updatedAt: response.updated_at,
+      adminReviewedAt: response.admin_reviewed_at ?? undefined,
+      attendancePlan: response.attendance_plan ?? "not_set",
+      attendanceStartsAt: response.attendance_starts_at ?? undefined,
+      attendanceEndsAt: response.attendance_ends_at ?? undefined,
+      conversationStatus: response.conversation_status ?? "none",
+      adminResponseStatus: response.admin_response_status ?? undefined,
+      messages: (response.event_response_messages ?? [])
+        .map((message: DatabaseRow) => ({
+          id: message.id,
+          body: message.body,
+          authorRole: message.author_role,
+          createdAt: message.created_at,
+        }))
+        .sort((a: DatabaseRow, b: DatabaseRow) => a.createdAt.localeCompare(b.createdAt)),
+    })),
+  };
+}
+
+export function mapAvailabilityRow(row: DatabaseRow): AvailabilityBlock | undefined {
+  const startsAt = validTimestamp(row.starts_at);
+  const endsAt = validTimestamp(row.ends_at);
+  if (!startsAt || !endsAt) return undefined;
+
+  return {
+    id: row.id,
+    organisationId: row.organisation_id,
+    title: row.title,
+    note: row.note ?? undefined,
+    startsAt,
+    endsAt,
+    adminReviewedAt: row.admin_reviewed_at ?? undefined,
+  };
+}
