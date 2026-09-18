@@ -4189,12 +4189,39 @@ function AdminHubPage({ items, potentialMeetings, onOpenSchedule, onOpenInbox, o
   const inboxDescription = pendingActions
     ? `${pendingActions} update${pendingActions === 1 ? "" : "s"} need review (${pendingScheduleUpdates} schedule, ${pendingPotentialUpdates} Potential Biz Meet). Marking an update reviewed clears it from the working queue.`
     : "No company updates are waiting for review. New replies and messages will appear here automatically.";
-  return <div><p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">Admin workspace</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Admin hub</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Your starting point: each workspace below has one job, with a plain-language description and a direct route in.</p><div className="mt-6 grid gap-5 lg:grid-cols-2"><AdminHubGuide title="Schedule" description="Create and update programme events, target them to the right startups, check dates, costs and conflicts, and control what companies can see." action="Open schedule" onOpen={onOpenSchedule} tone="indigo" /><AdminHubGuide title="Potential Biz Meets" description="Create one-to-one institutional opportunities, set the LVCN relationship status, and review each startup’s accept, reject or pending decision." action="Open Potential Biz Meets" onOpen={onOpenMeetings} tone="emerald" /><AdminHubGuide title="Programme Record" description="Build a weekly snapshot for one startup, retain declined events for audit, and export either a schedule spreadsheet or a visual calendar." action="Open Programme Record" onOpen={onOpenReport} tone="slate" /><AdminHubGuide title="Action inbox" description={inboxDescription} action="Open action inbox" onOpen={onOpenInbox} tone={pendingActions ? "amber" : "slate"} /><AdminHubGuide title="Startup Updates" description="Send and review durable messages that should remain visible to startups outside an individual schedule decision." action="Open Startup Updates" onOpen={onOpenUpdates} tone="slate" /><AdminHubGuide title="Cohort decisions" description="Review the historical decision record across the programme. Use this as a reference, not as the daily action queue." action="Open cohort decisions" onOpen={onOpenDecisions} tone="slate" /></div></div>;
+  return <div>
+    <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">Admin workspace</p>
+    <section className="relative mt-1 overflow-hidden rounded-3xl bg-gradient-to-br from-[#0e1c3d] via-[#162c5b] to-indigo-700 p-6 text-white shadow-[0_18px_45px_rgba(22,44,91,.18)] sm:p-8">
+      <div className="pointer-events-none absolute -right-20 -top-24 size-64 rounded-full border-[24px] border-white/5" />
+      <div className="relative max-w-3xl">
+        <p className="text-[10px] font-bold uppercase tracking-[.18em] text-indigo-200">LVCN programme control centre</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Admin hub</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-indigo-100">Choose a workspace below. Each one has a clear job: plan the programme, respond to company activity, or produce a reliable record.</p>
+      </div>
+      <div className="relative mt-6 grid gap-2 sm:grid-cols-3">
+        <HubStat label="Schedule records" value={items.length} />
+        <HubStat label="Potential Biz Meets" value={potentialMeetings.length} />
+        <HubStat label="Updates to review" value={pendingActions} alert={pendingActions > 0} />
+      </div>
+    </section>
+    <div className="mt-7 flex items-end justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-950">Workspaces</h2><p className="mt-1 text-sm text-slate-500">Start with the schedule, then follow the inbox when companies respond.</p></div><span className="hidden rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500 sm:inline">6 admin tools</span></div>
+    <div className="mt-4 grid gap-4 lg:grid-cols-2"><AdminHubGuide number="01" title="Schedule" description="Create and update programme events, target them to the right startups, check dates, costs and conflicts, and control what companies can see." action="Open schedule" onOpen={onOpenSchedule} tone="indigo" /><AdminHubGuide number="02" title="Potential Biz Meets" description="Create one-to-one institutional opportunities, set the LVCN relationship status, and review each startup’s decision." action="Open Potential Biz Meets" onOpen={onOpenMeetings} tone="emerald" /><AdminHubGuide number="03" title="Action inbox" description={inboxDescription} action="Open action inbox" onOpen={onOpenInbox} tone={pendingActions ? "amber" : "slate"} /><AdminHubGuide number="04" title="Startup Updates" description="Send and review durable messages that remain visible outside an individual schedule decision." action="Open Startup Updates" onOpen={onOpenUpdates} tone="slate" /><AdminHubGuide number="05" title="Programme Record" description="Build a weekly snapshot for one startup, retain declined events for audit, and export a spreadsheet or calendar PDF." action="Open Programme Record" onOpen={onOpenReport} tone="slate" /><AdminHubGuide number="06" title="Cohort Retention" description="See how each company is responding and how consistently its invited users return to the programme board." action="Open Cohort Retention" onOpen={onOpenDecisions} tone="slate" /></div>
+  </div>;
 }
 
-function AdminHubGuide({ title, description, action, onOpen, tone }: { title: string; description: string; action: string; onOpen: () => void; tone: "amber" | "emerald" | "indigo" | "slate"; }) {
-  const styles = { amber: "border-amber-200 bg-amber-50", emerald: "border-emerald-200 bg-emerald-50", indigo: "border-indigo-200 bg-indigo-50", slate: "border-slate-200 bg-white" };
-  return <section className={cn("flex min-h-56 flex-col rounded-2xl border p-6", styles[tone])}><h2 className="text-xl font-semibold text-slate-950">{title}</h2><p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">{description}</p><Button type="button" variant={tone === "indigo" ? "indigo" : "secondary"} className="mt-auto self-start" onClick={onOpen}>{action}</Button></section>;
+function HubStat({ label, value, alert = false }: { label: string; value: number; alert?: boolean }) {
+  return <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur"><p className={cn("text-2xl font-bold", alert && "text-amber-200")}>{value}</p><p className="mt-0.5 text-xs font-medium text-indigo-100">{label}</p></div>;
+}
+
+function AdminHubGuide({ number, title, description, action, onOpen, tone }: { number: string; title: string; description: string; action: string; onOpen: () => void; tone: "amber" | "emerald" | "indigo" | "slate"; }) {
+  const styles = {
+    amber: { card: "border-amber-200 bg-amber-50/70 hover:border-amber-300", icon: "bg-amber-100 text-amber-800", label: "Needs attention" },
+    emerald: { card: "border-emerald-200 bg-emerald-50/60 hover:border-emerald-300", icon: "bg-emerald-100 text-emerald-800", label: "Relationships" },
+    indigo: { card: "border-indigo-200 bg-indigo-50/70 hover:border-indigo-300", icon: "bg-indigo-100 text-indigo-800", label: "Plan the programme" },
+    slate: { card: "border-slate-200 bg-white hover:border-indigo-200", icon: "bg-slate-100 text-slate-700", label: "Review and communicate" },
+  }[tone];
+  const Icon = title === "Schedule" ? CalendarDays : title === "Potential Biz Meets" ? Link2 : title === "Action inbox" ? Bell : title === "Startup Updates" ? CircleHelp : title === "Programme Record" ? FileDown : LayoutList;
+  return <section className={cn("group flex min-h-52 flex-col rounded-2xl border p-5 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg", styles.card)}><div className="flex items-start justify-between gap-3"><div className={cn("flex size-11 items-center justify-center rounded-2xl", styles.icon)}><Icon className="size-5" /></div><span className="text-xs font-bold tracking-[.12em] text-slate-400">{number}</span></div><p className="mt-4 text-[10px] font-bold uppercase tracking-[.14em] text-slate-500">{styles.label}</p><h2 className="mt-1 text-xl font-semibold text-slate-950">{title}</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">{description}</p><Button type="button" variant={tone === "indigo" ? "indigo" : "secondary"} className="mt-5 self-start" onClick={onOpen}>{action}<ArrowRight className="ml-1.5 size-4 transition group-hover:translate-x-0.5" /></Button></section>;
 }
 
 // Legacy layout retained while existing internal links settle on the queue view.
