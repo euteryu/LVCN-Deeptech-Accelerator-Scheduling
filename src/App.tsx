@@ -62,6 +62,9 @@ import type {
   AttendancePlan,
   AvailabilityBlock,
   Decision,
+  EngagementAccessEvent,
+  EngagementIdentity,
+  EngagementInvite,
   ItemType,
   MeetingTarget,
   PotentialMeeting,
@@ -83,6 +86,7 @@ import { supabase } from "./lib/supabase";
 import { canManageCompanyProposal } from "./lib/access";
 import { DatePickerField, FieldLabel, Input, Select } from "./components/form-controls";
 import { ExternalEventsPage, LocationPage, OrganisersPage, ToiletMapPage } from "./components/programme-info-pages";
+import { AdminEngagementPanel } from "./components/admin-engagement-panel";
 import { meetingTargetValues, scheduleItemValues } from "./lib/schedule-persistence";
 import {
   bookingLabel,
@@ -405,6 +409,9 @@ export default function App({
   const [items, setItems] = useState(productionMode ? [] : seedItems);
   const [potentialMeetings, setPotentialMeetings] = useState<PotentialMeeting[]>([]);
   const [startupUpdates, setStartupUpdates] = useState<StartupUpdate[]>([]);
+  const [engagementEvents, setEngagementEvents] = useState<EngagementAccessEvent[]>([]);
+  const [engagementIdentities, setEngagementIdentities] = useState<EngagementIdentity[]>([]);
+  const [engagementInvites, setEngagementInvites] = useState<EngagementInvite[]>([]);
   const [updatesSchemaReady, setUpdatesSchemaReady] = useState(!productionMode);
   const [organisationNames, setOrganisationNames] = useState<Record<string, string>>({});
   const [, setHiddenMeetingCategories] = useState<
@@ -591,10 +598,42 @@ export default function App({
   const recordedSession = useRef<string | undefined>(undefined);
   useEffect(() => {
     const client = supabase;
-    if (!productionMode || !client || profile.role !== "startup_member" || !profile.organisationId || recordedSession.current === profile.id) return;
+    if (!productionMode || !client || profile.role === "lvnc_admin" || !profile.organisationId || recordedSession.current === profile.id) return;
     recordedSession.current = profile.id;
     void client.from("app_activity_events").insert({ actor_id: profile.id, organisation_id: profile.organisationId, event_type: "session_started" });
   }, [productionMode, profile.id, profile.role, profile.organisationId]);
+
+  useEffect(() => {
+    const client = supabase;
+    if (!productionMode || !client || profile.role !== "lvnc_admin" || page !== "decisions") return;
+    let disposed = false;
+    const loadEngagement = async () => {
+      const [{ data: identityRows, error: identityError }, { data: inviteRows, error: inviteError }] = await Promise.all([
+        client.from("profiles").select("id,email,full_name,role,organisation_id"),
+        client.from("allowed_invites").select("email,full_name,role,organisation_id"),
+      ]);
+      if (identityError || inviteError || disposed) return;
+
+      const activityRows: any[] = [];
+      const pageSize = 1000;
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await client
+          .from("app_activity_events")
+          .select("actor_id,organisation_id,occurred_at")
+          .order("occurred_at", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (error || disposed) return;
+        activityRows.push(...(data ?? []));
+        if ((data ?? []).length < pageSize) break;
+      }
+      if (disposed) return;
+      setEngagementEvents(activityRows.map((row) => ({ actorId: row.actor_id, organisationId: row.organisation_id, occurredAt: row.occurred_at })));
+      setEngagementIdentities((identityRows ?? []).map((row: any) => ({ id: row.id, email: row.email, fullName: row.full_name ?? undefined, role: row.role, organisationId: row.organisation_id ?? undefined })));
+      setEngagementInvites((inviteRows ?? []).map((row: any) => ({ email: row.email, fullName: row.full_name ?? undefined, role: row.role, organisationId: row.organisation_id ?? undefined })));
+    };
+    void loadEngagement();
+    return () => { disposed = true; };
+  }, [page, productionMode, profile.role]);
 
   useEffect(() => {
     const client = supabase;
@@ -1552,6 +1591,10 @@ export default function App({
             <DecisionsPage
               items={decisionItems}
               potentialMeetings={potentialMeetings}
+              engagementEvents={engagementEvents}
+              engagementIdentities={engagementIdentities}
+              engagementInvites={engagementInvites}
+              organisationNames={organisationNames}
               profile={profile}
               language={language}
               onOpenSchedule={() => {
@@ -4819,14 +4862,18 @@ function LegacyBusinessMeetingsPage({
 
 function AdminDecisionsDashboard({
   items,
-  potentialMeetings,
+  engagementEvents,
+  engagementIdentities,
+  engagementInvites,
+  organisationNames,
   onOpenSchedule,
-  onOpenBusinessMeetings,
 }: {
   items: ScheduleItem[];
-  potentialMeetings: PotentialMeeting[];
+  engagementEvents: EngagementAccessEvent[];
+  engagementIdentities: EngagementIdentity[];
+  engagementInvites: EngagementInvite[];
+  organisationNames: Record<string, string>;
   onOpenSchedule: () => void;
-  onOpenBusinessMeetings: () => void;
 }) {
   const actionable = items.filter(
     (item) =>
@@ -4856,25 +4903,12 @@ function AdminDecisionsDashboard({
     }),
     { pending: 0, confirmed: 0, rejected: 0 },
   );
-  // Potential Biz Meets are stored in their own table. The old schedule-item
-  // counter stayed at zero after those records were correctly separated from
-  // the calendar, so derive these figures from the dedicated records instead.
-  const outreachTotals = potentialMeetings.reduce(
-    (current, meeting) => ({
-      contacted: current.contacted + (meeting.status === "contacted" ? 1 : 0),
-      agreed: current.agreed + (meeting.status === "agreed" ? 1 : 0),
-      rejected: current.rejected + (meeting.status === "rejected" ? 1 : 0),
-    }),
-    { contacted: 0, agreed: 0, rejected: 0 },
-  );
-  const pendingMeetingDecisions = potentialMeetings.filter((meeting) => meeting.decision === "undecided").length;
-  const agreedWithoutTime = potentialMeetings.filter((meeting) => meeting.decision === "going" && !meeting.proposedStartsAt).length;
   return (
     <div>
       <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">LVCN control centre</p>
       <h1 className="mt-1 text-3xl font-semibold tracking-tight">Cohort decisions</h1>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-        Monitor startup responses, then coordinate shared introductions without duplicating an institution for every company.
+        Monitor startup responses alongside company and user engagement throughout the programme.
       </p>
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         {[
@@ -4915,23 +4949,7 @@ function AdminDecisionsDashboard({
           </table>
         </div>
       </section>
-      <section className="mt-6 rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="font-semibold text-indigo-950">Potential Biz Meet coordination</h2>
-            <p className="mt-1 text-xs leading-5 text-indigo-800">These are dedicated Potential Biz Meet records, grouped by their current outreach status. They are not calendar events.</p>
-          </div>
-          <Button type="button" variant="indigo" onClick={onOpenBusinessMeetings}>Manage Potential Biz Meets</Button>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl bg-white p-3"><p className="text-2xl font-bold text-amber-700">{outreachTotals.contacted}</p><p className="text-xs font-semibold text-slate-600">In outreach</p></div>
-          <div className="rounded-xl bg-white p-3"><p className="text-2xl font-bold text-emerald-700">{outreachTotals.agreed}</p><p className="text-xs font-semibold text-slate-600">Outreach agreed</p></div>
-          <div className="rounded-xl bg-white p-3"><p className="text-2xl font-bold text-slate-900">{pendingMeetingDecisions}</p><p className="text-xs font-semibold text-slate-600">Startup decisions waiting</p></div>
-        </div>
-        {agreedWithoutTime > 0 && (
-          <p className="mt-3 text-xs font-semibold text-amber-800">{agreedWithoutTime} agreed introduction{agreedWithoutTime === 1 ? "" : "s"} still need{agreedWithoutTime === 1 ? "s" : ""} a proposed time. Open Potential Biz Meets to allocate one.</p>
-        )}
-      </section>
+      <AdminEngagementPanel events={engagementEvents} identities={engagementIdentities} invites={engagementInvites} organisationNames={organisationNames} />
     </div>
   );
 }
@@ -4939,6 +4957,10 @@ function AdminDecisionsDashboard({
 function DecisionsPage({
   items,
   potentialMeetings,
+  engagementEvents,
+  engagementIdentities,
+  engagementInvites,
+  organisationNames,
   profile,
   language,
   onOpenSchedule,
@@ -4946,6 +4968,10 @@ function DecisionsPage({
 }: {
   items: ScheduleItem[];
   potentialMeetings: PotentialMeeting[];
+  engagementEvents: EngagementAccessEvent[];
+  engagementIdentities: EngagementIdentity[];
+  engagementInvites: EngagementInvite[];
+  organisationNames: Record<string, string>;
   profile: Profile;
   language: Language;
   onOpenSchedule: () => void;
@@ -4955,9 +4981,11 @@ function DecisionsPage({
     return (
       <AdminDecisionsDashboard
         items={items}
-        potentialMeetings={potentialMeetings}
+        engagementEvents={engagementEvents}
+        engagementIdentities={engagementIdentities}
+        engagementInvites={engagementInvites}
+        organisationNames={organisationNames}
         onOpenSchedule={onOpenSchedule}
-        onOpenBusinessMeetings={onOpenBusinessMeetings}
       />
     );
   const responseFor = (item: ScheduleItem) =>

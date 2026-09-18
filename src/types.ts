@@ -165,3 +165,24 @@ export interface StartupUpdate {
   readAt?: string;
 }
 export type ViewMode = "week" | "day" | "month";
+
+export interface EngagementAccessEvent {
+  actorId: string;
+  organisationId: string;
+  occurredAt: string;
+}
+
+export interface EngagementIdentity {
+  id: string;
+  email: string;
+  fullName?: string;
+  role: Role;
+  organisationId?: string;
+}
+
+export interface EngagementInvite {
+  email: string;
+  fullName?: string;
+  role: Role;
+  organisationId?: string;
+}
