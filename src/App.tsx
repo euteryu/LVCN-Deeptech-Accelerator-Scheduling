@@ -714,9 +714,11 @@ export default function App({
         // a startup filter and can never crowd the shared template.
         const orgMatch = isPartnerObserver
           ? organisationFilter === "all" || item.visibilityScope === "cohort" || item.organisationIds.includes(organisationFilter)
-          : organisationFilter === "all"
+          : isAdmin && organisationFilter === "all"
             ? item.itemType === "lvnc_core" && item.visibilityScope === "cohort" && item.organisationIds.length === 0
-            : item.visibilityScope === "cohort" || item.organisationIds.includes(organisationFilter);
+            : organisationFilter === "all"
+              ? item.visibilityScope === "cohort" || item.organisationIds.includes(profile.organisationId ?? "")
+              : item.visibilityScope === "cohort" || item.organisationIds.includes(organisationFilter);
         const declinedByStartup = !isAdmin && !isPartnerObserver && item.responses.some(
           (response) => response.organisationId === profile.organisationId && response.decision === "pass",
         );
