@@ -49,11 +49,6 @@ export const organisations: Organisation[] = [
     name: "YepBio",
     slug: "yepbio",
   },
-  {
-    id: "99999999-9999-4999-8999-999999999999",
-    name: "Recon Labs",
-    slug: "recon-labs",
-  },
 ];
 
 export const profiles: Profile[] = [
@@ -1348,7 +1343,8 @@ const companySpecificItems: ScheduleItem[] = [
     "21:00",
     "London",
   ),
-  companyEvent(
+  /* Recon Labs withdrew; its demo schedule is intentionally omitted. */
+  /* companyEvent(
     "recon-sifted",
     organisations[8].id,
     "2026-09-30",
@@ -1400,7 +1396,7 @@ const companySpecificItems: ScheduleItem[] = [
     "18:00",
     "21:00",
     "London",
-  ),
+  ), */
 ];
 
 export const seedItems: ScheduleItem[] = [
