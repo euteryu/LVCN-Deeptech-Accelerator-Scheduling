@@ -6585,7 +6585,7 @@ function CreateDialog({
                     <Input
                       name="eventUrl"
                       type="url"
-                      defaultValue={item?.eventUrl}
+                      defaultValue={item?.eventUrl === "null" || item?.eventUrl === "undefined" ? undefined : item?.eventUrl}
                       placeholder="https://"
                     />
                     <p className="mt-1 text-xs text-slate-500">This is the link shown as “Open official event page” in the event details.</p>

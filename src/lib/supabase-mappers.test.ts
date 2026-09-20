@@ -59,4 +59,28 @@ describe("Supabase row mappers", () => {
     expect(item.organisationIds).toEqual([]);
     expect(item.responses).toEqual([]);
   });
+
+  it("normalises legacy stringified null optional fields", () => {
+    const item = mapScheduleItemRow({
+      id: "item-legacy-null",
+      title: "Imported programme event",
+      item_type: "lvnc_core",
+      visibility_scope: "cohort",
+      attendance_rule: "compulsory",
+      time_precision: "exact",
+      starts_at: "2026-10-08T09:00:00Z",
+      ends_at: "2026-10-08T10:00:00Z",
+      event_url: "null",
+      registration_deadline: "null",
+      review_by: "undefined",
+      cost_type: "not_applicable",
+      status: "proposed",
+      booking_status: "details_to_verify",
+      priority: "not_rated",
+    });
+
+    expect(item.eventUrl).toBeUndefined();
+    expect(item.registrationDeadline).toBeUndefined();
+    expect(item.reviewBy).toBeUndefined();
+  });
 });

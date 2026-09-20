@@ -12,6 +12,17 @@ import {
 
 type DatabaseRow = Record<string, any>;
 
+// A few early imports stored SQL nulls as the literal text "null". Treat
+// those legacy values as absent so optional HTML controls (notably type=url)
+// do not block editing an otherwise valid schedule row.
+const nullableText = (value: unknown) => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return !trimmed || trimmed.toLowerCase() === "null" || trimmed.toLowerCase() === "undefined"
+    ? undefined
+    : value;
+};
+
 export function mapPotentialMeetingRow(row: DatabaseRow): PotentialMeeting {
   const adminDetails = firstRelated<DatabaseRow>(row.potential_meeting_admin_details);
   const decision = firstRelated<DatabaseRow>(row.potential_meeting_decisions);
@@ -75,17 +86,17 @@ export function mapScheduleItemRow(row: DatabaseRow): ScheduleItem {
     endsAt: validTimestamp(row.ends_at),
     timePrecision: row.time_precision,
     location: row.location ?? undefined,
-    eventUrl: row.event_url ?? row.meeting_link ?? undefined,
-    registrationDeadline: row.registration_deadline ?? undefined,
-    reviewBy: row.review_by ?? undefined,
+    eventUrl: nullableText(row.event_url) ?? nullableText(row.meeting_link),
+    registrationDeadline: nullableText(row.registration_deadline),
+    reviewBy: nullableText(row.review_by),
     costType: row.cost_type,
-    costNote: row.cost_note ?? undefined,
+    costNote: nullableText(row.cost_note),
     status: row.status,
     bookingStatus: row.booking_status,
     priority: row.priority,
-    fit: row.fit ?? undefined,
-    nextAction: row.next_action ?? undefined,
-    sourceNote: row.source_note ?? undefined,
+    fit: nullableText(row.fit),
+    nextAction: nullableText(row.next_action),
+    sourceNote: nullableText(row.source_note),
     participationByOrganisation: Object.fromEntries(
       participationRows.map((entry: DatabaseRow) => [entry.organisation_id, entry.status]),
     ),
@@ -97,11 +108,11 @@ export function mapScheduleItemRow(row: DatabaseRow): ScheduleItem {
         adminNote: entry.admin_note ?? undefined,
       }]),
     ),
-    meetingCategory: row.meeting_category ?? undefined,
-    meetingStatus: row.meeting_status ?? undefined,
-    contactName: row.contact_name ?? undefined,
-    contactEmail: row.contact_email ?? undefined,
-    meetingNote: row.meeting_note ?? undefined,
+    meetingCategory: nullableText(row.meeting_category),
+    meetingStatus: nullableText(row.meeting_status),
+    contactName: nullableText(row.contact_name),
+    contactEmail: nullableText(row.contact_email),
+    meetingNote: nullableText(row.meeting_note),
     meetingTargets: organisations.map((entry: DatabaseRow) => ({
       organisationId: entry.organisation_id,
       outreachStatus:
