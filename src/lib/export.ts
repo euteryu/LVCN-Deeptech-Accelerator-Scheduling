@@ -1,4 +1,4 @@
-import { format, isSameDay } from "date-fns";
+import { addDays, format, isSameDay, startOfWeek } from "date-fns";
 import jsPDF from "jspdf";
 import writeXlsxFile from "write-excel-file/browser";
 import type { Organisation, ScheduleItem } from "../types";
@@ -100,6 +100,10 @@ const headerCell = (value: string) => cell(value, {
 export async function exportExcel(items: ScheduleItem[], organisations: Organisation[], options: ExportOptions) {
   const sorted = [...items].sort((a, b) => (a.startsAt ?? "z").localeCompare(b.startsAt ?? "z"));
   const spreadsheet = options.mode === "spreadsheet";
+  if (!spreadsheet) {
+    await exportCalendarExcel(sorted, options);
+    return;
+  }
   const columns = spreadsheet
     ? ["Event / Meeting", "Date", "Start–end", "Type", "Status", "Priority", "Booking", "Why it fits", "Next action", "Location", "Audience"]
     : ["Date", "Time", "Event / Meeting", "Type", "Status", "Location", "Why it fits", "Next action", "Booking / cost"];
@@ -132,13 +136,99 @@ export async function exportExcel(items: ScheduleItem[], organisations: Organisa
   options.onProgress?.(100);
 }
 
+async function exportCalendarExcel(items: ScheduleItem[], options: ExportOptions) {
+  const dated = items.filter((item) => item.startsAt);
+  const firstWeek = dated.length ? startOfWeek(new Date(dated[0].startsAt!), { weekStartsOn: 1 }) : startOfWeek(new Date(), { weekStartsOn: 1 });
+  const lastWeek = dated.length ? startOfWeek(new Date(dated[dated.length - 1].startsAt!), { weekStartsOn: 1 }) : firstWeek;
+  const data: any[][] = [
+    [cell("LVCN | Programme calendar", { fontWeight: "bold", fontSize: 16, textColor: "#162C5B" })],
+    [cell(`Exported ${format(new Date(), "d MMMM yyyy, HH:mm")} · London time`, { fontStyle: "italic", textColor: "#5B6472" })],
+    [],
+  ];
+  let weekStart = firstWeek;
+  let processed = 0;
+  while (weekStart <= lastWeek) {
+    const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+    data.push([cell(`${format(weekStart, "d MMM")} – ${format(addDays(weekStart, 6), "d MMM yyyy")}`, { fontWeight: "bold", fontSize: 13, backgroundColor: "#162C5B", textColor: "#FFFFFF" })]);
+    data.push(days.map((day) => cell(`${format(day, "EEEE")}\n${format(day, "d MMM")}`, { fontWeight: "bold", backgroundColor: "#DCEFE4", textColor: "#162C5B", alignVertical: "center" })));
+    const appointments = days.map((day) => dated.filter((item) => isSameDay(new Date(item.startsAt!), day)));
+    const rows = Math.max(1, ...appointments.map((dayItems) => dayItems.length));
+    for (let row = 0; row < rows; row += 1) {
+      data.push(appointments.map((dayItems) => {
+        const item = dayItems[row];
+        if (!item) return cell("", { backgroundColor: "#F8FAFC" });
+        processed += 1;
+        cancelled(options);
+        return cell(`${timeLabel(item)}\n${item.title}\n${locationLabel(item)}`, { backgroundColor: row % 2 ? "#EEF2FF" : "#FFFFFF", textColor: "#172554", fontWeight: "bold" });
+      }));
+    }
+    data.push(Array.from({ length: 7 }, () => cell("", { backgroundColor: "#FFFFFF" })));
+    weekStart = addDays(weekStart, 7);
+    options.onProgress?.(10 + Math.round((processed / Math.max(dated.length, 1)) * 80));
+  }
+  cancelled(options);
+  await writeXlsxFile(data, { columns: Array.from({ length: 7 }, () => ({ width: 27 })) }).toFile(`LVCN-calendar-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+  options.onProgress?.(100);
+}
+
 const pdfText = (pdf: jsPDF, value: string, x: number, y: number, width: number, size = 9) => {
   pdf.setFontSize(size);
   return pdf.splitTextToSize(value, width) as string[];
 };
 
+function exportCalendarPdf(items: ScheduleItem[], options: ExportOptions) {
+  const sorted = [...items].sort((a, b) => (a.startsAt ?? "z").localeCompare(b.startsAt ?? "z"));
+  const dated = sorted.filter((item) => item.startsAt);
+  const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
+  const width = pdf.internal.pageSize.getWidth();
+  const height = pdf.internal.pageSize.getHeight();
+  const margin = 28;
+  const columnWidth = (width - margin * 2) / 7;
+  const firstWeek = dated.length ? startOfWeek(new Date(dated[0].startsAt!), { weekStartsOn: 1 }) : startOfWeek(new Date(), { weekStartsOn: 1 });
+  const lastWeek = dated.length ? startOfWeek(new Date(dated[dated.length - 1].startsAt!), { weekStartsOn: 1 }) : firstWeek;
+  let weekStart = firstWeek;
+  let page = 0;
+
+  while (weekStart <= lastWeek) {
+    if (page > 0) pdf.addPage();
+    page += 1;
+    pdf.setFillColor(22, 44, 91); pdf.rect(0, 0, width, 66, "F");
+    pdf.setTextColor(255); pdf.setFont("helvetica", "bold"); pdf.setFontSize(18); pdf.text("LVCN weekly calendar", margin, 29);
+    pdf.setFont("helvetica", "normal"); pdf.setFontSize(9); pdf.text(`${format(weekStart, "d MMM")} – ${format(addDays(weekStart, 6), "d MMM yyyy")} · London time`, margin, 47);
+    const top = 82;
+    for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+      const day = addDays(weekStart, dayIndex);
+      const x = margin + dayIndex * columnWidth;
+      const dayItems = dated.filter((item) => isSameDay(new Date(item.startsAt!), day));
+      pdf.setFillColor(220, 239, 228); pdf.rect(x, top, columnWidth - 2, 28, "F");
+      pdf.setTextColor(22, 44, 91); pdf.setFont("helvetica", "bold"); pdf.setFontSize(8); pdf.text(format(day, "EEE"), x + 7, top + 11);
+      pdf.setFontSize(10); pdf.text(format(day, "d MMM"), x + 7, top + 22);
+      let y = top + 39;
+      dayItems.forEach((item, index) => {
+        cancelled(options);
+        const lines = pdf.splitTextToSize(`${timeLabel(item)}\n${item.title}`, columnWidth - 16).slice(0, 5) as string[];
+        const cardHeight = Math.max(38, lines.length * 10 + 12);
+        if (y + cardHeight < height - 34) {
+          pdf.setFillColor(index % 2 ? 247 : 238, index % 2 ? 249 : 244, index % 2 ? 252 : 249);
+          pdf.setDrawColor(220, 226, 235); pdf.roundedRect(x + 3, y, columnWidth - 8, cardHeight, 4, 4, "FD");
+          pdf.setTextColor(35); pdf.setFont("helvetica", "normal"); pdf.setFontSize(8); pdf.text(lines, x + 8, y + 12);
+          y += cardHeight + 6;
+        }
+      });
+    }
+    weekStart = addDays(weekStart, 7);
+    options.onProgress?.(10 + Math.round((Math.min(weekStart.getTime(), lastWeek.getTime()) - firstWeek.getTime()) / Math.max(lastWeek.getTime() - firstWeek.getTime(), 1) * 85));
+  }
+  pdf.setTextColor(100); pdf.setFontSize(8); pdf.text("LVCN Programme Board · Use the app record for live updates", margin, height - 16);
+  cancelled(options); pdf.save(`LVCN-calendar-${format(new Date(), "yyyy-MM-dd")}.pdf`); options.onProgress?.(100);
+}
+
 export function exportPdf(items: ScheduleItem[], options: ExportOptions) {
   const spreadsheet = options.mode === "spreadsheet";
+  if (!spreadsheet) {
+    exportCalendarPdf(items, options);
+    return;
+  }
   const sorted = [...items].sort((a, b) => (a.startsAt ?? "z").localeCompare(b.startsAt ?? "z"));
   const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: spreadsheet ? "landscape" : "portrait" });
   const width = pdf.internal.pageSize.getWidth();

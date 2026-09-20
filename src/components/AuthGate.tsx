@@ -26,6 +26,15 @@ export function AuthGate({
   const [ready, setReady] = useState(demoMode);
   const [error, setError] = useState<string>();
 
+  // AuthGate remains mounted when the programme board is signed out. Keep the
+  // document-level theme in sync here as well, so the access screen cannot be
+  // left with dark text controls on a light card after logging out.
+  useEffect(() => {
+    const dark = window.localStorage.getItem("lvcn-theme") === "dark";
+    document.documentElement.classList.toggle("dark", dark);
+    document.documentElement.style.colorScheme = dark ? "dark" : "light";
+  }, []);
+
   useEffect(() => {
     const client = supabase;
     if (demoMode || !client) return;
@@ -179,8 +188,12 @@ export function AuthGate({
 
 function AuthShell({ children }: { children: ReactNode }) {
   return (
-    <main className="grid min-h-screen place-items-center bg-[#f5f5f1] p-5">
-      <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-7 shadow-[0_24px_70px_rgba(15,23,42,.08)] sm:p-9">
+    <main className="auth-shell grid min-h-screen place-items-center overflow-hidden bg-[#f5f5f1] p-5">
+      <div className="auth-aurora auth-aurora-one" aria-hidden="true" />
+      <div className="auth-aurora auth-aurora-two" aria-hidden="true" />
+      <div className="auth-orbit auth-orbit-one" aria-hidden="true" />
+      <div className="auth-orbit auth-orbit-two" aria-hidden="true" />
+      <div className="auth-card w-full max-w-md rounded-3xl border border-slate-200 bg-white p-7 shadow-[0_24px_70px_rgba(15,23,42,.08)] sm:p-9">
         {children}
       </div>
     </main>

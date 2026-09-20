@@ -17,16 +17,21 @@ const statusStyles = {
 
 export function AdminEngagementPanel({
   events,
+  baselineAt,
   identities,
   invites,
   organisationNames,
+  onReset,
 }: {
   events: EngagementAccessEvent[];
+  baselineAt?: string;
   identities: EngagementIdentity[];
   invites: EngagementInvite[];
   organisationNames: Record<string, string>;
+  onReset: () => void;
 }) {
-  const companies = buildEngagementSummary(events, identities, invites, organisationNames);
+  const currentEvents = baselineAt ? events.filter((event) => event.occurredAt >= baselineAt) : events;
+  const companies = buildEngagementSummary(currentEvents, identities, invites, organisationNames);
   const users = companies.flatMap((company) => company.users);
   const accessCount = users.reduce((total, user) => total + user.accessCount, 0);
   const activeUsers = users.filter((user) => user.status === "active").length;
@@ -39,9 +44,9 @@ export function AdminEngagementPanel({
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[.16em] text-indigo-200">Engagement and retention</p>
             <h2 className="mt-1 text-xl font-semibold">Who is using the programme board?</h2>
-            <p className="mt-1 max-w-2xl text-xs leading-5 text-indigo-100">An access is recorded when an invited participant opens the app. Repeat anonymous browser profiles are combined by email address.</p>
+            <p className="mt-1 max-w-2xl text-xs leading-5 text-indigo-100">An access is recorded when an invited participant opens the app. Repeat browser profiles are combined by email address.{baselineAt && <> This reporting period began {format(new Date(baselineAt), "d MMM yyyy, HH:mm")}.</>}</p>
           </div>
-          <div className="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-indigo-50"><Activity className="size-4" /> Live usage record</div>
+          <div className="flex flex-wrap items-center justify-end gap-2"><div className="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs font-semibold text-indigo-50"><Activity className="size-4" /> Live usage record</div><button type="button" onClick={() => { if (window.confirm("Reset engagement reporting from now? Historical access records are retained, but all current dashboard counts will restart.")) onReset(); }} className="rounded-xl border border-white/20 px-3 py-2 text-xs font-bold text-white hover:bg-white/10">Reset tracking from now</button></div>
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <Metric icon={Activity} value={accessCount} label="Recorded app opens" />

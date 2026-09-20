@@ -54,6 +54,11 @@ export function mapStartupUpdateRow(row: DatabaseRow): StartupUpdate {
 
 export function mapScheduleItemRow(row: DatabaseRow): ScheduleItem {
   const organisations = row.schedule_item_organisations ?? [];
+  const participationRows = row.schedule_item_participation ?? [];
+  const participationDetails = participationRows.map((entry: DatabaseRow) => ({
+    organisationId: entry.organisation_id,
+    ...(entry.schedule_item_participation_admin_details?.[0] ?? {}),
+  }));
   const responses = row.event_responses ?? [];
 
   return {
@@ -81,6 +86,17 @@ export function mapScheduleItemRow(row: DatabaseRow): ScheduleItem {
     fit: row.fit ?? undefined,
     nextAction: row.next_action ?? undefined,
     sourceNote: row.source_note ?? undefined,
+    participationByOrganisation: Object.fromEntries(
+      participationRows.map((entry: DatabaseRow) => [entry.organisation_id, entry.status]),
+    ),
+    participationDetailsByOrganisation: Object.fromEntries(
+      participationDetails.map((entry: DatabaseRow) => [entry.organisationId, {
+        attendees: entry.attendees ?? undefined,
+        attendanceStartsOn: entry.attendance_starts_on ?? undefined,
+        attendanceEndsOn: entry.attendance_ends_on ?? undefined,
+        adminNote: entry.admin_note ?? undefined,
+      }]),
+    ),
     meetingCategory: row.meeting_category ?? undefined,
     meetingStatus: row.meeting_status ?? undefined,
     contactName: row.contact_name ?? undefined,

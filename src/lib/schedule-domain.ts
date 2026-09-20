@@ -33,6 +33,9 @@ export const calendarState = (item: ScheduleItem, decision?: Decision) =>
     ? "border-emerald-300 bg-emerald-50"
     : "border-dashed border-amber-300 bg-amber-50/50";
 
+export const isNotAttending = (item: ScheduleItem, organisationId?: string) =>
+  Boolean(organisationId && item.participationByOrganisation?.[organisationId] === "not_attending");
+
 export const nextWorkingDay = (date: Date, direction: 1 | -1) => {
   let next = addDays(date, direction);
   while (next.getDay() === 0 || next.getDay() === 6) next = addDays(next, direction);

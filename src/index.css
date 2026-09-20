@@ -17,6 +17,90 @@ button:active { transform: translateY(1px); }
 button:focus-visible, a:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
 ::selection { background: #c7d2fe; color: #1e1b4b; }
 
+/* Night-sky theme: the texture stays behind the interface, so dense planning
+   controls remain calm and readable rather than becoming a live wallpaper. */
+html.dark { color-scheme: dark; background: #070b1d; }
+html.dark body { background: radial-gradient(circle at 82% 4%, rgb(86 66 180 / .30), transparent 27rem), radial-gradient(circle at 8% 18%, rgb(29 78 216 / .17), transparent 24rem), #070b1d; }
+html.dark body::before { content: ""; pointer-events: none; position: fixed; inset: 0; z-index: 0; background-image: radial-gradient(circle at 12% 20%, rgb(255 255 255 / .72) 0 1px, transparent 1.6px), radial-gradient(circle at 74% 13%, rgb(196 181 253 / .6) 0 1px, transparent 1.5px), radial-gradient(circle at 92% 56%, rgb(255 255 255 / .52) 0 1px, transparent 1.5px), radial-gradient(circle at 35% 83%, rgb(147 197 253 / .55) 0 1px, transparent 1.5px); background-size: 240px 190px, 310px 240px, 270px 210px, 350px 280px; animation: night-sky-twinkle 8s ease-in-out infinite alternate; }
+html.dark #root { position: relative; z-index: 1; }
+.theme-dark { background: transparent !important; color: #e5e7eb !important; }
+.theme-dark .bg-white, .theme-dark [class*="bg-white"], .theme-dark .bg-slate-50, .theme-dark [class*="bg-slate-50"] { background-color: rgb(16 24 51 / .94) !important; }
+.theme-dark .bg-\[\#f7f7f4\], .theme-dark [class*="bg-\[\#f7f7f4\]"], .theme-dark .bg-slate-100, .theme-dark [class*="bg-slate-100"] { background-color: rgb(10 16 38 / .92) !important; }
+.theme-dark [class*="border-slate-"], .theme-dark [class*="divide-slate-"] { border-color: rgb(100 116 139 / .48) !important; }
+.theme-dark [class*="text-slate-9"], .theme-dark [class*="text-slate-8"] { color: #f8fafc !important; }
+.theme-dark [class*="text-slate-7"], .theme-dark [class*="text-slate-6"], .theme-dark [class*="text-slate-5"], .theme-dark [class*="text-slate-4"] { color: #cbd5e1 !important; }
+.theme-dark input, .theme-dark select, .theme-dark textarea { background-color: #0b1430 !important; color: #f8fafc !important; border-color: #475569 !important; }
+.theme-dark option { background: #0b1430; color: #f8fafc; }
+.theme-dark .bg-indigo-50, .theme-dark [class*="bg-indigo-50"] { background-color: rgb(49 46 129 / .38) !important; }
+.theme-dark .bg-emerald-50, .theme-dark [class*="bg-emerald-50"] { background-color: rgb(6 78 59 / .38) !important; }
+.theme-dark .bg-amber-50, .theme-dark [class*="bg-amber-50"] { background-color: rgb(120 53 15 / .35) !important; }
+.theme-dark .bg-violet-50, .theme-dark [class*="bg-violet-50"] { background-color: rgb(91 33 182 / .32) !important; }
+.theme-dark .bg-sky-50, .theme-dark [class*="bg-sky-50"] { background-color: rgb(3 105 161 / .28) !important; }
+.theme-dark .bg-rose-50, .theme-dark [class*="bg-rose-50"] { background-color: rgb(136 19 55 / .28) !important; }
+.theme-dark .bg-blue-50, .theme-dark [class*="bg-blue-50"] { background-color: rgb(30 64 175 / .30) !important; }
+.theme-dark .bg-teal-50, .theme-dark [class*="bg-teal-50"] { background-color: rgb(15 118 110 / .28) !important; }
+
+/* Complete the dark surface and contrast pass. The navigation uses a custom
+   warm-white shade in light mode, so it needs an explicit dark replacement. */
+.theme-dark .app-sidebar { background: linear-gradient(180deg, rgb(13 21 47 / .98), rgb(7 12 30 / .98)) !important; border-color: rgb(100 116 139 / .52) !important; box-shadow: 10px 0 30px rgb(0 0 0 / .12); }
+.theme-dark [class*="text-indigo-9"], .theme-dark [class*="text-indigo-8"],
+.theme-dark [class*="text-blue-9"], .theme-dark [class*="text-blue-8"],
+.theme-dark [class*="text-sky-9"], .theme-dark [class*="text-sky-8"],
+.theme-dark [class*="text-teal-9"], .theme-dark [class*="text-teal-8"],
+.theme-dark [class*="text-emerald-9"], .theme-dark [class*="text-emerald-8"] { color: #f1f5f9 !important; }
+.theme-dark [class*="text-indigo-7"], .theme-dark [class*="text-indigo-6"] { color: #c7d2fe !important; }
+.theme-dark [class*="text-blue-7"], .theme-dark [class*="text-blue-6"],
+.theme-dark [class*="text-sky-7"], .theme-dark [class*="text-sky-6"] { color: #bae6fd !important; }
+.theme-dark [class*="text-teal-7"], .theme-dark [class*="text-teal-6"],
+.theme-dark [class*="text-emerald-7"], .theme-dark [class*="text-emerald-6"] { color: #99f6e4 !important; }
+.theme-dark [class*="text-amber-9"], .theme-dark [class*="text-amber-8"] { color: #fef3c7 !important; }
+.theme-dark [class*="text-amber-7"], .theme-dark [class*="text-amber-6"] { color: #fcd34d !important; }
+.theme-dark [class*="text-rose-9"], .theme-dark [class*="text-rose-8"] { color: #ffe4e6 !important; }
+.theme-dark [class*="text-rose-7"], .theme-dark [class*="text-rose-6"] { color: #fda4af !important; }
+.theme-dark [class*="text-violet-9"], .theme-dark [class*="text-violet-8"] { color: #f5f3ff !important; }
+.theme-dark [class*="text-violet-7"], .theme-dark [class*="text-violet-6"] { color: #c4b5fd !important; }
+/* Links remain recognisable at a glance in a dark interface, without changing
+   high-contrast white text used inside solid action buttons. */
+.theme-dark a[href]:not([class*="text-white"]) { color: #7dd3fc !important; text-decoration-color: rgb(125 211 252 / .65) !important; }
+.theme-dark a[href]:not([class*="text-white"]):hover { color: #dbeafe !important; text-decoration: underline; }
+
+/* The access screen sits outside the board's .theme-dark wrapper. It must use
+   the document theme too, particularly after a user logs out in dark mode. */
+html.dark .auth-shell { background: transparent !important; color: #f8fafc; }
+html.dark .auth-card { background: rgb(16 24 51 / .96) !important; border-color: rgb(100 116 139 / .55) !important; box-shadow: 0 24px 70px rgb(0 0 0 / .34); }
+html.dark .auth-card [class*="text-slate-9"],
+html.dark .auth-card [class*="text-slate-8"] { color: #f8fafc !important; }
+html.dark .auth-card [class*="text-slate-7"],
+html.dark .auth-card [class*="text-slate-6"],
+html.dark .auth-card [class*="text-slate-5"],
+html.dark .auth-card [class*="text-slate-4"] { color: #cbd5e1 !important; }
+html.dark .auth-card input { background: #0b1430 !important; color: #f8fafc !important; border-color: #475569 !important; }
+html.dark .auth-card input::placeholder { color: #94a3b8 !important; }
+
+/* Access-only backdrop: all moving layers are decorative, behind the card and
+   deliberately slow so they never compete with typing or keyboard focus. */
+.auth-shell { position: relative; isolation: isolate; background: radial-gradient(ellipse at -8% 5%, #d5e2ff 0%, transparent 43%), radial-gradient(ellipse at 106% 93%, #d5f7eb 0%, transparent 43%), linear-gradient(135deg, #f6f9ff 0%, #edf3ff 48%, #f7fcfa 100%) !important; }
+.auth-card { position: relative; z-index: 2; backdrop-filter: blur(12px); }
+.auth-aurora, .auth-orbit { position: absolute; z-index: 0; pointer-events: none; will-change: transform; }
+.auth-aurora { width: 56rem; height: 33rem; border-radius: 50%; filter: blur(30px); opacity: .72; }
+.auth-aurora-one { top: -16rem; left: -18rem; background: radial-gradient(ellipse at center, rgb(99 102 241 / .54) 0%, rgb(125 211 252 / .40) 40%, transparent 71%); animation: auth-drift 22s ease-in-out infinite alternate; }
+.auth-aurora-two { right: -18rem; bottom: -16rem; background: radial-gradient(ellipse at center, rgb(45 212 191 / .42) 0%, rgb(167 139 250 / .44) 43%, transparent 71%); animation: auth-drift 27s ease-in-out -9s infinite alternate-reverse; }
+.auth-orbit { width: 50rem; height: 21rem; border: 1px solid rgb(99 102 241 / .30); border-radius: 50%; filter: blur(.1px); box-shadow: 0 0 42px rgb(129 140 248 / .12); }
+.auth-orbit-one { top: 5%; left: -18rem; transform: rotate(-21deg); animation: auth-orbit-light 34s ease-in-out infinite alternate; }
+.auth-orbit-two { right: -20rem; bottom: 2%; border-color: rgb(13 148 136 / .26); transform: rotate(28deg); animation: auth-orbit-light 38s ease-in-out -12s infinite alternate-reverse; }
+html.dark .auth-shell { background: radial-gradient(ellipse at 18% 6%, rgb(79 70 229 / .26), transparent 33rem), radial-gradient(ellipse at 92% 90%, rgb(14 116 144 / .22), transparent 30rem), #06091c !important; }
+html.dark .auth-shell::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: .7; background-image: radial-gradient(circle at 9% 14%, #fff 0 1px, transparent 1.7px), radial-gradient(circle at 77% 12%, #c4b5fd 0 1px, transparent 1.8px), radial-gradient(circle at 88% 52%, #e0f2fe 0 1px, transparent 1.6px), radial-gradient(circle at 27% 85%, #fff 0 1px, transparent 1.7px), radial-gradient(circle at 62% 73%, #a5b4fc 0 1px, transparent 1.6px); background-size: 213px 181px, 289px 227px, 247px 193px, 321px 263px, 277px 209px; animation: auth-stars 9s ease-in-out infinite alternate; }
+html.dark .auth-aurora { opacity: .78; filter: blur(40px); }
+html.dark .auth-aurora-one { background: radial-gradient(ellipse at center, rgb(99 102 241 / .56) 0%, rgb(168 85 247 / .27) 42%, transparent 71%); }
+html.dark .auth-aurora-two { background: radial-gradient(ellipse at center, rgb(14 165 233 / .38) 0%, rgb(45 212 191 / .19) 42%, transparent 70%); }
+html.dark .auth-orbit { width: 54rem; height: 25rem; border: 1px solid rgb(196 181 253 / .27); box-shadow: 0 0 36px rgb(99 102 241 / .18), inset 0 0 28px rgb(45 212 191 / .06); }
+html.dark .auth-orbit-one { top: -3%; left: -17rem; }
+html.dark .auth-orbit-two { right: -20rem; bottom: -4%; border-color: rgb(103 232 249 / .22); }
+@keyframes auth-drift { from { transform: translate3d(-2%, -1%, 0) scale(.96); } to { transform: translate3d(4%, 4%, 0) scale(1.08); } }
+@keyframes auth-orbit-light { from { translate: 0 0; rotate: 0deg; } to { translate: 3rem -1.5rem; rotate: 4deg; } }
+@keyframes auth-stars { from { opacity: .38; } to { opacity: .78; } }
+@keyframes night-sky-twinkle { from { opacity: .34; } to { opacity: .72; } }
+
 @keyframes note-flash {
   0%, 100% { box-shadow: 0 0 0 0 rgb(129 140 248 / 0); }
   35%, 70% { box-shadow: 0 0 0 7px rgb(129 140 248 / 0.28); }
@@ -33,6 +117,28 @@ button:focus-visible, a:focus-visible { outline: 2px solid #6366f1; outline-offs
 table.min-w-\[760px\] { table-layout: fixed; }
 table.min-w-\[760px\] th:first-child { width: 13rem; }
 table.min-w-\[760px\] td:first-child > * { max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.min-w-\[980px\] { table-layout: fixed; }
+table.min-w-\[980px\] th:first-child,
+table.min-w-\[980px\] td:first-child { width: 8rem; max-width: 8rem; }
+table.min-w-\[980px\] td:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Admin Potential Biz Meets search is rendered outside the collapsible filter panel. */
+details.group > div.relative.mt-3:has(input[placeholder*="Search institution"]) { display: none; }
+
+@keyframes startup-rating-nudge {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(245 158 11 / 0.18); }
+  50% { box-shadow: 0 0 0 6px rgb(245 158 11 / 0.18), 0 0 22px rgb(245 158 11 / 0.2); }
+}
+.startup-rating-nudge { animation: startup-rating-nudge 2.4s ease-in-out infinite; }
+.event-not-attending {
+  background-image: repeating-linear-gradient(-45deg, rgb(100 116 139 / 0.12) 0, rgb(100 116 139 / 0.12) 5px, transparent 5px, transparent 10px) !important;
+  filter: grayscale(0.7);
+  opacity: 0.72;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.dark body::before { animation: none; }
+  .auth-aurora, .auth-orbit, html.dark .auth-shell::before { animation: none; }
+  .startup-rating-nudge { animation: none; box-shadow: 0 0 0 4px rgb(245 158 11 / 0.2); }
+}
 
 /* Deliberately slow, high-contrast alert for decisions and schedule clashes.
    The two bright states in each cycle make the required action unmistakable

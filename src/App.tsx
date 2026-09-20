@@ -45,9 +45,11 @@ import {
   LogOut,
   MapPin,
   Menu,
+  Moon,
   Plus,
   Printer,
   Search,
+  Sun,
   Toilet,
   X,
 } from "lucide-react";
@@ -67,6 +69,7 @@ import type {
   EngagementInvite,
   ItemType,
   MeetingTarget,
+  Organisation,
   PotentialMeeting,
   Profile,
   ScheduleItem,
@@ -87,10 +90,11 @@ import { canManageCompanyProposal } from "./lib/access";
 import { DatePickerField, FieldLabel, Input, Select } from "./components/form-controls";
 import { ExternalEventsPage, LocationPage, OrganisersPage, ToiletMapPage } from "./components/programme-info-pages";
 import { AdminEngagementPanel } from "./components/admin-engagement-panel";
-import { meetingTargetValues, scheduleItemValues } from "./lib/schedule-persistence";
+import { meetingTargetValues, scheduleItemValues, scheduleParticipationDetailValues, scheduleParticipationValues } from "./lib/schedule-persistence";
 import {
   bookingLabel,
   calendarState,
+  isNotAttending,
   isGenericBusinessMeetingSlot,
   isSupersededDeepFusionMeeting,
   meetingCategoryFor,
@@ -150,7 +154,7 @@ const uiText = {
     externalLinks: "External event links",
     hotelRecs: "Hotel Recs",
     tutorial: "Tutorial",
-    addCompanyWork: "Add company work",
+    addCompanyWork: "Block company time",
     organisers: "Investor Showcase",
     investorShowcase: "Investor Showcase",
     collapse: "Collapse panel",
@@ -216,7 +220,7 @@ const koreanUiText = {
   externalLinks: "\uC678\uBD80 \uD589\uC0AC \uB9C1\uD06C",
   hotelRecs: "\uD638\uD154 \uCD94\uCC9C",
   tutorial: "\uC0AC\uC6A9 \uC548\uB0B4",
-  addCompanyWork: "\uD68C\uC0AC \uC5C5\uBB34 \uCD94\uAC00",
+  addCompanyWork: "\uD68C\uC0AC \uC2DC\uAC04 \uCC28\uB2E8",
   organisers: "\uD22C\uC790\uC790 \uC1FC\uCF00\uC774\uC2A4",
   investorShowcase: "\uD22C\uC790\uC790 \uC1FC\uCF00\uC774\uC2A4",
   collapse: "\uD328\uB110 \uC811\uAE30",
@@ -265,6 +269,45 @@ const meetingCategoryLabel = (category: string) => {
   if (value.includes("internal team")) return "Internal team";
   return "Other";
 };
+
+const koreanMeetingCategoryLabels: Record<string, string> = {
+  Investor: "\uD22C\uC790\uC790",
+  "Advertising & agency partners": "\uAD11\uACE0 \uBC0F \uC5D0\uC774\uC804\uC2DC \uD30C\uD2B8\uB108",
+  "Creative & media ecosystem": "\uD06C\uB9AC\uC5D0\uC774\uD2F0\uBE0C \uBC0F \uBBF8\uB514\uC5B4 \uC0DD\uD0DC\uACC4",
+  "Regulation & compliance": "\uADDC\uC81C \uBC0F \uCEF4\uD50C\uB77C\uC774\uC5B8\uC2A4",
+  "Research & clinical": "\uC5F0\uAD6C \uBC0F \uC784\uC0C1",
+  "Healthcare & NHS": "\uD5EC\uC2A4\uCF00\uC5B4 \uBC0F NHS",
+  "Sales & distribution": "\uC601\uC5C5 \uBC0F \uC720\uD1B5",
+  "Manufacturing & industrial": "\uC81C\uC870 \uBC0F \uC0B0\uC5C5",
+  "Automation & robotics": "\uC790\uB3D9\uD654 \uBC0F \uB85C\uBD07",
+  "Defence & mobility": "\uAD6D\uBC29 \uBC0F \uBAA8\uBE4C\uB9AC\uD2F0",
+  "Strategic & corporate partners": "\uC804\uB7B5 \uBC0F \uAE30\uC5C5 \uD30C\uD2B8\uB108",
+  "Technology ecosystem": "\uAE30\uC220 \uC0DD\uD0DC\uACC4",
+  "Internal team": "\uB0B4\uBD80 \uD300",
+  Other: "\uAE30\uD0C0",
+};
+
+const potentialMeetingCategoryDisplay = (category: string, language: Language) => {
+  const label = meetingCategoryLabel(category);
+  return language === "ko" ? koreanMeetingCategoryLabels[label] ?? label : label;
+};
+
+const potentialMeetingStatusDisplay = (status: PotentialMeeting["status"], language: Language) => {
+  if (language !== "ko") return pretty(status);
+  return ({ draft: "\uC900\uBE44 \uC911", contacted: "\uC5F0\uB77D\uD568", agreed: "\uC870\uC728 \uD569\uC758", rejected: "\uC5F0\uACB0 \uBCF4\uB958", paused: "\uBCF4\uB958" } as const)[status];
+};
+
+const potentialMeetingNextAction = (value: string | undefined, language: Language) => {
+  if (language !== "ko" || !value) return value;
+  if (value.startsWith("Startup to rate this potential meeting")) return "\uC774 \uAE30\uAD00\uC5D0 \uB300\uD574 1~3\uC810\uC73C\uB85C \uC6B0\uC120\uC21C\uC704\uB97C \uD3C9\uAC00\uD574 \uC8FC\uC138\uC694. LVCN\uC740 \uD3C9\uAC00\uB97C \uBC14\uD0D5\uC73C\uB85C \uC5F0\uB77D \uC6B0\uC120\uC21C\uC704\uB97C \uC815\uD569\uB2C8\uB2E4.";
+  if (value.startsWith("Follow up on the sent introduction")) return "\uBCF4\uB0B8 \uC18C\uAC1C \uC5F0\uB77D\uC744 \uD6C4\uC18D \uC870\uCE58\uD558\uACE0 \uC6B0\uC120\uC21C\uC704 \uD3C9\uAC00\uB97C \uAE30\uB85D\uD558\uC138\uC694.";
+  if (value.startsWith("Coordinate the agreed next step")) return "\uAE30\uAD00\uACFC \uD68C\uC0AC\uC640 \uD568\uAED8 \uD569\uC758\uB41C \uB2E4\uC74C \uB2E8\uACC4\uB97C \uC870\uC728\uD558\uC138\uC694.";
+  return value;
+};
+
+const potentialMeetingKoreanRelevance = (meeting: PotentialMeeting) => meeting.startupVisibleNote
+  ? `\uC774 \uAE30\uAD00\uC740 ${potentialMeetingCategoryDisplay(meeting.category, "ko")}\uC640(\uACFC) \uAD00\uB828\uB41C \uC5F0\uACB0 \uAE30\uD68C\uC785\uB2C8\uB2E4. \uD68C\uC0AC\uC758 \uD604\uC7AC \uBAA9\uD45C\uC640\uC758 \uC801\uD569\uC131\uC744 \uD3C9\uAC00\uD55C \uD6C4 \uC6B0\uC120\uC21C\uC704\uB97C \uC815\uD574 \uC8FC\uC138\uC694.`
+  : undefined;
 
 const potentialMeetingRelevance = (meeting: PotentialMeeting, language: Language) => {
   if (language !== "ko" || meeting.organisationId !== "99999999-9999-4999-8999-999999999996")
@@ -410,6 +453,7 @@ export default function App({
   const [potentialMeetings, setPotentialMeetings] = useState<PotentialMeeting[]>([]);
   const [startupUpdates, setStartupUpdates] = useState<StartupUpdate[]>([]);
   const [engagementEvents, setEngagementEvents] = useState<EngagementAccessEvent[]>([]);
+  const [engagementBaselineAt, setEngagementBaselineAt] = useState<string>();
   const [engagementIdentities, setEngagementIdentities] = useState<EngagementIdentity[]>([]);
   const [engagementInvites, setEngagementInvites] = useState<EngagementInvite[]>([]);
   const [updatesSchemaReady, setUpdatesSchemaReady] = useState(!productionMode);
@@ -479,12 +523,20 @@ export default function App({
   const [language, setLanguage] = useState<Language>(() =>
     window.localStorage.getItem("lvcn-language") === "ko" ? "ko" : "en",
   );
+  const [theme, setTheme] = useState<"light" | "dark">(() =>
+    window.localStorage.getItem("lvcn-theme") === "dark" ? "dark" : "light",
+  );
   const isAdmin = profile.role === "lvnc_admin";
   const isPartnerObserver = profile.role === "partner_observer";
   useEffect(() => {
     window.localStorage.setItem("lvcn-language", language);
     document.documentElement.lang = language;
   }, [language]);
+  useEffect(() => {
+    window.localStorage.setItem("lvcn-theme", theme);
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    document.documentElement.style.colorScheme = theme;
+  }, [theme]);
 
   useEffect(() => {
     const client = supabase;
@@ -496,7 +548,7 @@ export default function App({
       loading = true;
       try {
       const scheduleSelect =
-        "*, schedule_item_organisations(organisation_id,meeting_outreach_status,availability_note,coordination_note), event_responses(id,organisation_id,decision,note,updated_at,admin_reviewed_at,attendance_plan,attendance_starts_at,attendance_ends_at,conversation_status,admin_response_status,event_response_messages(id,body,author_role,created_at)), schedule_item_conflict_groups(conflict_group_id)";
+        "*, schedule_item_organisations(organisation_id,meeting_outreach_status,availability_note,coordination_note), schedule_item_participation(organisation_id,status,schedule_item_participation_admin_details(attendees,attendance_starts_on,attendance_ends_on,admin_note)), event_responses(id,organisation_id,decision,note,updated_at,admin_reviewed_at,attendance_plan,attendance_starts_at,attendance_ends_at,conversation_status,admin_response_status,event_response_messages(id,body,author_role,created_at)), schedule_item_conflict_groups(conflict_group_id)";
       const legacyScheduleSelect =
         "*, schedule_item_organisations(organisation_id), event_responses(organisation_id,decision,note,updated_at,admin_reviewed_at), schedule_item_conflict_groups(conflict_group_id)";
       let scheduleResult = await client
@@ -506,6 +558,11 @@ export default function App({
       // Keep the board usable while an administrator is applying the optional
       // per-startup coordination migration.
       if (scheduleResult.error)
+        scheduleResult = await client
+          .from(profile.role === "lvnc_admin" ? "schedule_items" : "schedule_events")
+          .select(legacyScheduleSelect)
+          .order("starts_at", { ascending: true, nullsFirst: false });
+      if (scheduleResult.error && profile.role !== "lvnc_admin")
         scheduleResult = await client
           .from("schedule_items")
           .select(legacyScheduleSelect)
@@ -598,9 +655,9 @@ export default function App({
   const recordedSession = useRef<string | undefined>(undefined);
   useEffect(() => {
     const client = supabase;
-    if (!productionMode || !client || profile.role === "lvnc_admin" || !profile.organisationId || recordedSession.current === profile.id) return;
+     if (!productionMode || !client || recordedSession.current === profile.id) return;
     recordedSession.current = profile.id;
-    void client.from("app_activity_events").insert({ actor_id: profile.id, organisation_id: profile.organisationId, event_type: "session_started" }).then(({ error }) => {
+     void client.from("app_activity_events").insert({ actor_id: profile.id, organisation_id: profile.organisationId ?? null, event_type: "session_started" }).then(({ error }) => {
       if (error) console.warn("Could not record programme access", error.message);
     });
   }, [productionMode, profile.id, profile.role, profile.organisationId]);
@@ -610,9 +667,10 @@ export default function App({
     if (!productionMode || !client || profile.role !== "lvnc_admin" || page !== "decisions") return;
     let disposed = false;
     const loadEngagement = async () => {
-      const [{ data: identityRows, error: identityError }, { data: inviteRows, error: inviteError }] = await Promise.all([
+      const [{ data: identityRows, error: identityError }, { data: inviteRows, error: inviteError }, { data: baselineRows }] = await Promise.all([
         client.from("profiles").select("id,email,full_name,role,organisation_id"),
         client.from("allowed_invites").select("email,full_name,role,organisation_id"),
+        client.from("engagement_reporting_baseline").select("reset_at").eq("singleton", true).limit(1),
       ]);
       if (identityError || inviteError || disposed) return;
 
@@ -630,6 +688,7 @@ export default function App({
       }
       if (disposed) return;
       setEngagementEvents(activityRows.map((row) => ({ actorId: row.actor_id, organisationId: row.organisation_id, occurredAt: row.occurred_at })));
+      setEngagementBaselineAt(baselineRows?.[0]?.reset_at);
       setEngagementIdentities((identityRows ?? []).map((row: any) => ({ id: row.id, email: row.email, fullName: row.full_name ?? undefined, role: row.role, organisationId: row.organisation_id ?? undefined })));
       setEngagementInvites((inviteRows ?? []).map((row: any) => ({ email: row.email, fullName: row.full_name ?? undefined, role: row.role, organisationId: row.organisation_id ?? undefined })));
     };
@@ -992,13 +1051,14 @@ export default function App({
     }
     showToast("Potential Biz Meet deleted");
   };
-  const savePotentialMeetingDecision = async (meeting: PotentialMeeting, decision: Decision, priorityRating?: 1 | 2 | 3) => {
+  const savePotentialMeetingDecision = async (meeting: PotentialMeeting, decision: Decision, priorityRating?: 1 | 2 | 3 | null) => {
     const previous = potentialMeetings.find((entry) => entry.id === meeting.id);
-    const updated = { ...meeting, decision, priorityRating: priorityRating ?? meeting.priorityRating, adminReviewedAt: undefined };
+    const nextPriorityRating = priorityRating === null ? undefined : priorityRating ?? meeting.priorityRating;
+    const updated = { ...meeting, decision, priorityRating: nextPriorityRating, adminReviewedAt: undefined };
     setPotentialMeetings((current) => current.map((entry) => entry.id === meeting.id ? updated : entry));
     if (productionMode && supabase) {
       const { error } = await supabase.from("potential_meeting_decisions").upsert({
-        potential_meeting_id: meeting.id, decision, priority_rating: priorityRating ?? meeting.priorityRating ?? null, updated_by: profile.id, admin_reviewed_at: null, admin_reviewed_by: null,
+        potential_meeting_id: meeting.id, decision, priority_rating: priorityRating === null ? null : priorityRating ?? meeting.priorityRating ?? null, updated_by: profile.id, admin_reviewed_at: null, admin_reviewed_by: null,
       }, { onConflict: "potential_meeting_id" });
       if (error) {
         setPotentialMeetings((current) => current.map((entry) => entry.id === meeting.id ? previous ?? entry : entry));
@@ -1029,6 +1089,19 @@ export default function App({
       return;
     }
     showToast("Company work added; LVCN can see the block");
+  };
+  const deleteAvailabilityBlock = async (block: AvailabilityBlock) => {
+    const previous = availability;
+    setAvailability((current) => current.filter((entry) => entry.id !== block.id));
+    if (productionMode && supabase) {
+      const { error } = await supabase.from("availability_blocks").delete().eq("id", block.id);
+      if (error) {
+        setAvailability(() => previous);
+        showToast(`Blocked time could not be removed: ${error.message}`);
+        return;
+      }
+    }
+    showToast("Blocked time removed");
   };
   const markAvailabilityReviewed = async (block: AvailabilityBlock) => {
     const reviewedAt = new Date().toISOString();
@@ -1142,6 +1215,22 @@ export default function App({
         // Avoid leaving an invisible/orphaned item when its audience failed.
         await supabase.from("schedule_items").delete().eq("id", item.id);
         throw targetError;
+      }
+    }
+    const participationRows = scheduleParticipationValues(item);
+    if (participationRows.length) {
+      const { error: participationError } = await supabase.from("schedule_item_participation").upsert(participationRows, { onConflict: "schedule_item_id,organisation_id" });
+      if (participationError) {
+        await supabase.from("schedule_items").delete().eq("id", item.id);
+        throw participationError;
+      }
+    }
+    const participationDetails = scheduleParticipationDetailValues(item);
+    if (participationDetails.length) {
+      const { error: detailError } = await supabase.from("schedule_item_participation_admin_details").upsert(participationDetails, { onConflict: "schedule_item_id,organisation_id" });
+      if (detailError) {
+        await supabase.from("schedule_items").delete().eq("id", item.id);
+        throw detailError;
       }
     }
   };
@@ -1287,9 +1376,9 @@ export default function App({
     showToast("Item permanently deleted");
     setSelectedId(undefined);
   };
-  const updateItem = async (item: ScheduleItem) => {
+  const updateItem = async (item: ScheduleItem): Promise<boolean> => {
     const previous = items.find((entry) => entry.id === item.id);
-    if (!previous) return;
+    if (!previous) return false;
     if (productionMode && supabase) {
       const { error } = await supabase
         .from("schedule_items")
@@ -1297,7 +1386,7 @@ export default function App({
         .eq("id", item.id);
       if (error) {
         showToast(`Item could not be saved: ${error.message}`);
-        return;
+        return false;
       }
       const { error: targetDeleteError } = await supabase
         .from("schedule_item_organisations")
@@ -1306,7 +1395,7 @@ export default function App({
       if (targetDeleteError) {
         await supabase.from("schedule_items").update(scheduleItemValues(previous)).eq("id", item.id);
         showToast(`Audience could not be saved: ${targetDeleteError.message}`);
-        return;
+        return false;
       }
       if (item.visibilityScope === "selected_organisations" && item.organisationIds.length) {
         const { error: targetInsertError } = await supabase
@@ -1319,7 +1408,23 @@ export default function App({
             await supabase.from("schedule_item_organisations").insert(previous.organisationIds.map((organisationId) => meetingTargetValues(previous, organisationId)));
           }
           showToast(`Audience could not be saved: ${targetInsertError.message}`);
-          return;
+          return false;
+        }
+      }
+      const participationRows = scheduleParticipationValues(item);
+      if (participationRows.length) {
+        const { error: participationError } = await supabase.from("schedule_item_participation").upsert(participationRows, { onConflict: "schedule_item_id,organisation_id" });
+        if (participationError) {
+          showToast(`Startup attendance status could not be saved: ${participationError.message}`);
+          return false;
+        }
+      }
+      const participationDetails = scheduleParticipationDetailValues(item);
+      if (participationDetails.length) {
+        const { error: detailError } = await supabase.from("schedule_item_participation_admin_details").upsert(participationDetails, { onConflict: "schedule_item_id,organisation_id" });
+        if (detailError) {
+          showToast(`Startup attendance details could not be saved: ${detailError.message}`);
+          return false;
         }
       }
     }
@@ -1327,6 +1432,7 @@ export default function App({
       current.map((entry) => (entry.id === item.id ? item : entry)),
     );
     showToast("Item updated");
+    return true;
   };
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const setMeetingCategoryVisible = (category: string, visible: boolean) => {
@@ -1397,13 +1503,16 @@ export default function App({
     setCreateRange({ startsAt, endsAt });
     setCreateOpen(true);
   };
-  const runExport = async (kind: "excel" | "pdf") => {
+  const runExport = async (
+    kind: "excel" | "pdf",
+    mode: "calendar" | "spreadsheet",
+  ) => {
     exportCancelled.current = false;
     setExportState({ kind, progress: 5 });
     try {
       const exporters = await import("./lib/export");
       const options = {
-        mode: kind === "excel" ? "spreadsheet" : "calendar",
+        mode,
         onProgress: (progress: number) =>
           setExportState((current) =>
             current ? { ...current, progress } : current,
@@ -1414,7 +1523,7 @@ export default function App({
         await exporters.exportExcel(visibleItems, organisations, options);
       else exporters.exportPdf(visibleItems, options);
       if (!exportCancelled.current)
-        showToast(`${kind.toUpperCase()} export downloaded`);
+        showToast(`${mode === "calendar" ? "Calendar" : "Spreadsheet"} ${kind.toUpperCase()} downloaded`);
     } catch (error) {
       if (error instanceof Error && error.message === "Export cancelled")
         showToast("Export cancelled");
@@ -1423,9 +1532,26 @@ export default function App({
       setExportState(undefined);
     }
   };
+  const resetEngagementBaseline = async () => {
+    const previous = engagementBaselineAt;
+    const resetAt = new Date().toISOString();
+    setEngagementBaselineAt(resetAt);
+    if (!productionMode || !supabase) return;
+    const { error } = await supabase.from("engagement_reporting_baseline").upsert({
+      singleton: true,
+      reset_at: resetAt,
+      reset_by: profile.id,
+    }, { onConflict: "singleton" });
+    if (error) {
+      setEngagementBaselineAt(previous);
+      showToast(`Engagement reset could not be saved: ${error.message}`);
+      return;
+    }
+    showToast("Engagement tracking reset; new access is counted from now");
+  };
 
   return (
-    <div className="min-h-screen bg-[#f7f7f4] text-slate-950">
+    <div className={cn("min-h-screen bg-[#f7f7f4] text-slate-950", theme === "dark" && "theme-dark")}>
       <Sidebar
         profile={profile}
         page={page}
@@ -1439,7 +1565,7 @@ export default function App({
           setPage(nextPage);
         }}
         onBusy={() => setBusyOpen(true)}
-        adminActionCount={potentialMeetings.filter((meeting) => meeting.decision !== "undecided" && !meeting.adminReviewedAt).length + items.flatMap((item) => item.responses).filter((response) => (response.decision !== "undecided" || response.note) && !response.adminReviewedAt).length + availability.filter((block) => !block.adminReviewedAt).length}
+         adminActionCount={potentialMeetings.filter((meeting) => (meeting.decision !== "undecided" || meeting.priorityRating) && !meeting.adminReviewedAt).length + items.flatMap((item) => item.responses).filter((response) => (response.decision !== "undecided" || response.note) && !response.adminReviewedAt).length + availability.filter((block) => !block.adminReviewedAt).length}
         language={language}
         setLanguage={setLanguage}
         hiddenSections={hiddenSections}
@@ -1476,6 +1602,8 @@ export default function App({
           }}
           onMenu={() => setMobileMenu(true)}
           language={language}
+          theme={theme}
+          setTheme={setTheme}
         />
         <main className="mx-auto max-w-[1600px] px-4 pb-12 pt-5 sm:px-6 lg:px-8">
           {page === "organisers" ? (
@@ -1489,7 +1617,7 @@ export default function App({
           ) : page === "external-events" ? (
             <ExternalEventsPage />
           ) : page === "business-meetings" ? (
-            <BusinessMeetingsPage
+            <BusinessMeetingsPageV2
               meetings={potentialMeetings}
               scheduleItems={items}
               availability={availability}
@@ -1505,7 +1633,7 @@ export default function App({
               language={language}
             />
           ) : page === "updates" && !isPartnerObserver ? (
-            <StartupUpdatesPage updates={startupUpdates} schemaReady={updatesSchemaReady} isAdmin={isAdmin} organisationNames={organisationNames} onMarkAllRead={markStartupUpdatesRead} onSend={sendStartupUpdate} />
+            <StartupUpdatesPage updates={startupUpdates} schemaReady={updatesSchemaReady} isAdmin={isAdmin} organisationNames={organisationNames} onMarkAllRead={markStartupUpdatesRead} onSend={sendStartupUpdate} language={language} />
           ) : page === "admin-hub" && isAdmin ? (
             <AdminHubPage items={items} potentialMeetings={potentialMeetings} onOpenSchedule={() => setPage("calendar")} onOpenInbox={() => setPage("admin-inbox")} onOpenMeetings={() => setPage("business-meetings")} onOpenDecisions={() => setPage("decisions")} onOpenReport={() => setPage("admin-reporting")} onOpenUpdates={() => setPage("updates")} />
           ) : page === "admin-inbox" && isAdmin ? (
@@ -1557,8 +1685,39 @@ export default function App({
                 }}
                 onCreate={() => openCreateAt()}
                 onImport={() => setImportOpen(true)}
-                onExport={(kind: "excel" | "pdf") => void runExport(kind)}
-              />
+               onExport={(kind: "excel" | "pdf", mode: "calendar" | "spreadsheet") => void runExport(kind, mode)}
+             />
+              {!isAdmin && !isPartnerObserver && (
+                <section className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-3">
+                  <div className="flex items-start gap-3">
+                    <LockKeyhole className="mt-0.5 size-5 shrink-0 text-rose-700" />
+                    <div>
+                      <p className="text-sm font-bold text-rose-950">{language === "ko" ? "LVCN\uC5D0 \uBE44\uC6CC \uB450\uC5B4\uC57C \uD560 \uC2DC\uAC04\uC774 \uC788\uB098\uC694?" : "Need LVCN to keep time free?"}</p>
+                      <p className="mt-0.5 text-xs leading-5 text-rose-900">{language === "ko" ? "\uCD9C\uC7A5, \uD734\uAC00 \uB610\uB294 \uD68C\uC0AC \uC77C\uC815\uC744 \uCC28\uB2E8\uD558\uC138\uC694. \uC77C\uC815\uD45C\uC640 \uC2A4\uD504\uB808\uB4DC\uC2DC\uD2B8 \uBDF0\uC5D0 \uBAA8\uB450 \uD45C\uC2DC\uB418\uC5B4 \uAD00\uB9AC\uC790\uAC00 \uC774 \uC2DC\uAC04\uC5D0 \uC77C\uC815\uC744 \uC7A1\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4." : "Block travel, leave or company commitments. It will appear in both Calendar and Spreadsheet views so admins avoid scheduling over it."}</p>
+                    </div>
+                  </div>
+                  <Button type="button" variant="secondary" onClick={() => setBusyOpen(true)}>{language === "ko" ? koreanUiText.addCompanyWork : uiText.en.addCompanyWork}</Button>
+                </section>
+              )}
+              {!isAdmin && !isPartnerObserver && visibleAvailability.length > 0 && (
+                <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-900">{language === "ko" ? "\uCC28\uB2E8\uB41C \uD68C\uC0AC \uC2DC\uAC04" : "Your blocked company time"}</h2>
+                      <p className="mt-0.5 text-xs text-slate-500">{language === "ko" ? "\uC774 \uC2DC\uAC04\uB300\uB294 LVCN\uC5D0 \uD45C\uC2DC\uB418\uBA70, \uD68C\uC0AC \uC77C\uC815\uACFC \uACB9\uCE58\uB294 \uC608\uC57D\uC744 \uD53C\uD558\uB294 \uB370 \uC0AC\uC6A9\uB429\uB2C8\uB2E4." : "These windows are visible to LVCN and used to avoid scheduling over your commitments."}</p>
+                    </div>
+                    <span className="text-xs font-semibold text-slate-500">{language === "ko" ? `${visibleAvailability.length}\uAC1C \uCC28\uB2E8` : `${visibleAvailability.length} block${visibleAvailability.length === 1 ? "" : "s"}`}</span>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {visibleAvailability.map((block) => (
+                      <div key={block.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                        <div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{block.title}</p><p className="text-xs text-slate-500">{format(new Date(block.startsAt), "EEE d MMM, HH:mm")} – {format(new Date(block.endsAt), "EEE d MMM, HH:mm")}</p></div>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => void deleteAvailabilityBlock(block)}>{language === "ko" ? "\uCC28\uB2E8 \uC0AD\uC81C" : "Remove block"}</Button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
               {(isAdmin || isPartnerObserver) && (
                 <Filters
                   typeFilter={typeFilter}
@@ -1578,6 +1737,7 @@ export default function App({
                   availability={visibleAvailability}
                   isAdmin={isAdmin}
                   profile={profile}
+                  viewingOrganisationId={isAdmin && organisationFilter !== "all" ? organisationFilter : undefined}
                   onSelect={setSelectedId}
                   onSelectDay={(date) => setWeek(date)}
                   onCreateAt={isPartnerObserver ? () => undefined : openCreateAt}
@@ -1589,6 +1749,7 @@ export default function App({
                   isAdmin={isAdmin}
                   masterTemplate={isAdmin && organisationFilter === "all"}
                   profile={profile}
+                  viewingOrganisationId={isAdmin && organisationFilter !== "all" ? organisationFilter : undefined}
                   language={language}
                   anchorDate={week}
                   onSelectDay={(date) => setWeek(date)}
@@ -1602,6 +1763,7 @@ export default function App({
               items={decisionItems}
               potentialMeetings={potentialMeetings}
               engagementEvents={engagementEvents}
+              engagementBaselineAt={engagementBaselineAt}
               engagementIdentities={engagementIdentities}
               engagementInvites={engagementInvites}
               organisationNames={organisationNames}
@@ -1612,6 +1774,7 @@ export default function App({
                 setScheduleMode("spreadsheet");
               }}
               onOpenBusinessMeetings={() => setPage("business-meetings")}
+              onResetEngagement={resetEngagementBaseline}
             />
           )}
         </main>
@@ -1635,11 +1798,18 @@ export default function App({
         />
       )}
       <CreateDialog
+        key={`create-${createOpen}`}
         open={createOpen}
         setOpen={setCreateOpen}
         isAdmin={isAdmin}
         profile={profile}
-        defaultItemType={createDefaultType}
+        organisations={organisations}
+        defaultItemType={
+          isAdmin && organisationFilter !== "all"
+            ? "third_party"
+            : createDefaultType
+        }
+        initialOrganisationIds={isAdmin && organisationFilter !== "all" ? [organisationFilter] : undefined}
         initialStartsAt={createRange.startsAt}
         initialEndsAt={createRange.endsAt}
         onCreate={async (item) => {
@@ -1647,7 +1817,7 @@ export default function App({
             await persistNewItem(item);
           } catch (error) {
             showToast(`Item could not be created: ${error instanceof Error ? error.message : "try again"}`);
-            return;
+            return false;
           }
           setItemsWithHistory((current) => [...current, item]);
           setSelectedId(item.id);
@@ -1658,14 +1828,17 @@ export default function App({
             );
           }
           showToast("Item created");
+          return true;
         }}
       />
       {selected && (
         <CreateDialog
+          key={`edit-${selected.id}-${editOpen}`}
           open={editOpen}
           setOpen={setEditOpen}
           isAdmin={isAdmin}
           profile={profile}
+          organisations={organisations}
           item={selected}
           onCreate={updateItem}
         />
@@ -1673,6 +1846,7 @@ export default function App({
       <BusyDialog
         open={busyOpen}
         setOpen={setBusyOpen}
+        language={language}
         organisationId={profile.organisationId ?? organisations[0].id}
         onCreate={(block) => void saveAvailabilityBlock(block)}
       />
@@ -1840,7 +2014,7 @@ function Sidebar({
       )}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[232px] flex-col overflow-y-auto overscroll-contain border-r border-slate-200 bg-[#fbfbf9] px-4 py-5 transition-[width,padding,transform] duration-200 lg:translate-x-0",
+          "app-sidebar fixed inset-y-0 left-0 z-50 flex w-[232px] flex-col overflow-y-auto overscroll-contain border-r border-slate-200 bg-[#fbfbf9] px-4 py-5 transition-[width,padding,transform] duration-200 lg:translate-x-0",
           collapsed && "lg:w-[72px] lg:px-2",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
@@ -1955,7 +2129,7 @@ function Sidebar({
             </button>
           )}
         </nav>
-        {profile.role === "lvnc_admin" && <details open={programmeToolsOpen} onToggle={(event) => setProgrammeToolsOpen((event.currentTarget as HTMLDetailsElement).open)} className={cn("mt-4 border-t border-slate-200 pt-3", collapsed && "hidden")}><summary className="cursor-pointer list-none rounded-xl px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100"><span className="flex items-center justify-between">Programme tools <ChevronDown className={cn("size-4 transition-transform", programmeToolsOpen && "rotate-180")} /></span></summary><div className="mt-1 space-y-1"><p className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[.12em] text-slate-400">Shared with startups</p>{[{ id: "location", label: copy.venueLocation, icon: MapPin }, { id: "hotel-recs", label: copy.hotelRecs, icon: Building2 }, { id: "toilets", label: copy.toiletMap, icon: Toilet }, { id: "external-events", label: copy.externalLinks, icon: Link2 }].map((tool) => { const visible = !hiddenSections.includes(tool.id); const ToolIcon = tool.icon; return <div key={tool.id} className="flex items-center gap-1"><button type="button" onClick={() => { onNavigate(tool.id as "location" | "hotel-recs" | "toilets" | "external-events"); onClose(); }} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-600 hover:bg-slate-100"><ToolIcon className="size-4" />{tool.label}</button><button type="button" onClick={() => onSectionVisibilityChange(tool.id, !visible)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100" title={visible ? "Visible to startups" : "Hidden from startups"} aria-label={`${visible ? "Hide" : "Show"} ${tool.label} for startups`}>{visible ? <Eye className="size-4 text-emerald-600" /> : <EyeOff className="size-4 text-slate-400" />}</button></div>; })}<p className="px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-[.12em] text-slate-400">Admin utilities</p><button type="button" onClick={() => { onNavigate("organisers"); onClose(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-600 hover:bg-slate-100"><Link2 className="size-4" />{copy.organisers}</button><a href="https://luma.com/koreavc" target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"><ExternalLink className="size-4" />{copy.investorShowcase}</a><button type="button" onClick={() => setTutorialOpen(true)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-600 hover:bg-slate-100"><CircleHelp className="size-4" />{copy.tutorial}</button><button type="button" onClick={() => setLanguage(language === "en" ? "ko" : "en")} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-600 hover:bg-slate-100"><Languages className="size-4" />{language === "en" ? "Korean" : "English"}</button></div></details>}
+        {profile.role === "lvnc_admin" && <details open={programmeToolsOpen} onToggle={(event) => setProgrammeToolsOpen((event.currentTarget as HTMLDetailsElement).open)} className={cn("mt-4 border-t border-slate-200 pt-3", collapsed && "hidden")}><summary className="cursor-pointer list-none rounded-xl px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100"><span className="flex items-center justify-between">Programme tools <ChevronDown className={cn("size-4 transition-transform", programmeToolsOpen && "rotate-180")} /></span></summary><div className="mt-1 space-y-1"><p className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[.12em] text-slate-400">Shared with startups</p>{[{ id: "location", label: copy.venueLocation, icon: MapPin }, { id: "hotel-recs", label: copy.hotelRecs, icon: Building2 }, { id: "toilets", label: copy.toiletMap, icon: Toilet }, { id: "external-events", label: copy.externalLinks, icon: Link2 }].map((tool) => { const visible = !hiddenSections.includes(tool.id); const ToolIcon = tool.icon; return <div key={tool.id} className="flex items-center gap-1"><button type="button" onClick={() => { onNavigate(tool.id as "location" | "hotel-recs" | "toilets" | "external-events"); onClose(); }} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-600 hover:bg-slate-100"><ToolIcon className="size-4" />{tool.label}</button><button type="button" onClick={() => onSectionVisibilityChange(tool.id, !visible)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100" title={visible ? "Visible to startups" : "Hidden from startups"} aria-label={`${visible ? "Hide" : "Show"} ${tool.label} for startups`}>{visible ? <Eye className="size-4 text-emerald-600" /> : <EyeOff className="size-4 text-slate-400" />}</button></div>; })}<p className="px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-[.12em] text-slate-400">UTILITIES</p><button type="button" onClick={() => { onNavigate("organisers"); onClose(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-600 hover:bg-slate-100"><Link2 className="size-4" />{copy.organisers}</button><a href="https://luma.com/koreavc" target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"><ExternalLink className="size-4" />{copy.investorShowcase}</a><button type="button" onClick={() => setTutorialOpen(true)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-600 hover:bg-slate-100"><CircleHelp className="size-4" />{copy.tutorial}</button><button type="button" onClick={() => setLanguage(language === "en" ? "ko" : "en")} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-600 hover:bg-slate-100"><Languages className="size-4" />{language === "en" ? "Korean" : "English"}</button></div></details>}
         {profile.role !== "lvnc_admin" && <>
         <button
           onClick={() => {
@@ -2182,9 +2356,7 @@ function HotelRecommendationsPage({ language }: { language: Language }) {
     : { eyebrow: "Travel planning", title: "Hotel stays, priced with context", intro: "Compare live rates first, then choose a stay that works for your meetings, route and cancellation needs.", deal: "Find the best current deal", dealTitle: "Use comparison tools for the live price. Use this page for the right location.", dealBody: "Hotel prices shift by date, demand and cancellation terms. Check the total across more than one site before booking.", tools: "Comparison tools", toolsTitle: "Check live rates before you book", toolsBody: "Open a tool in a new tab to compare.", shortlists: "Programme shortlists", shortlistsTitle: "Stay close to where the work is", rooms: "Check rooms", directions: "Directions" };
   return (
     <div>
-      <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">{hotelCopy.eyebrow}</p>
-      <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">{hotelCopy.title}</h1>
-      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+      <p className="hidden">
         {hotelCopy.intro.length === 0 && language === "ko"
           ? "방문 가능성이 있는 지역별 소규모 추천 목록입니다. 평균 요금은 객실 1개당 1박 기준의 참고 가격이므로, 실제 날짜의 요금은 예약 링크에서 확인하세요."
           : hotelCopy.intro}
@@ -2266,6 +2438,8 @@ function Topbar({
   setProfile,
   onLogout,
   onMenu,
+  theme,
+  setTheme,
 }: {
   profile: Profile;
   language: Language;
@@ -2282,9 +2456,34 @@ function Topbar({
   setProfile: (profile: Profile) => void;
   onLogout: () => void;
   onMenu: () => void;
+  theme: "light" | "dark";
+  setTheme: (theme: "light" | "dark") => void;
 }) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
   const copy = language === "ko" ? koreanUiText : uiText.en;
+
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const closeWhenOutside = (event: PointerEvent) => {
+      if (!profileMenuRef.current?.contains(event.target as Node))
+        setProfileMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setProfileMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeWhenOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeWhenOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [profileMenuOpen]);
+
+  useEffect(() => {
+    setProfileMenuOpen(false);
+  }, [page]);
+
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200/90 bg-[#f7f7f4]/90 px-4 backdrop-blur sm:px-6 lg:px-8">
       <button
@@ -2341,7 +2540,7 @@ function Topbar({
                   ?.name}
           </p>
         </div>
-        <div className="relative">
+        <div ref={profileMenuRef} className="relative">
           <button
             onClick={() => setProfileMenuOpen((open) => !open)}
             aria-expanded={profileMenuOpen}
@@ -2409,6 +2608,14 @@ function Topbar({
                 >
                   <LogOut className="size-4" />
                   {demoMode ? "Reset preview" : "Log out"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+                  className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  {theme === "light" ? <Moon className="size-4 text-indigo-700" /> : <Sun className="size-4 text-amber-500" />}
+                  {theme === "light" ? "Dark mode" : "Light mode"}
                 </button>
               </div>
             </div>
@@ -2582,11 +2789,11 @@ function CalendarHeader({
             <ChevronDown className="size-3.5" />
           </Button>
           {exportOpen && (
-            <div className="absolute right-0 top-11 z-20 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"><p className="px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[.1em] text-slate-400">Choose export format</p>
+            <div className="absolute right-0 top-11 z-20 w-72 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"><p className="px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[.1em] text-slate-400">Choose a layout and file type</p><p className="px-3 pb-2 text-xs leading-4 text-slate-500">Calendar is a clean, time-ordered schedule. Detailed exports include operational context.</p>
               <button
                 onClick={() => {
                   setExportOpen(false);
-                  onExport("excel");
+                  onExport("excel", "spreadsheet");
                 }}
                 className="flex w-full gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"
               >
@@ -2596,12 +2803,32 @@ function CalendarHeader({
               <button
                 onClick={() => {
                   setExportOpen(false);
-                  onExport("pdf");
+                  onExport("pdf", "calendar");
                 }}
                 className="flex w-full gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"
               >
                 <Printer className="size-4" />
                 {language === "ko" ? "캘린더 PDF" : "Calendar PDF"}
+              </button>
+              <button
+                onClick={() => {
+                  setExportOpen(false);
+                  onExport("excel", "calendar");
+                }}
+                className="flex w-full gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                <FileDown className="size-4" />
+                {language === "ko" ? "캘린더 Excel" : "Calendar Excel"}
+              </button>
+              <button
+                onClick={() => {
+                  setExportOpen(false);
+                  onExport("pdf", "spreadsheet");
+                }}
+                className="flex w-full gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                <Printer className="size-4" />
+                {language === "ko" ? "상세 일정 PDF" : "Detailed schedule PDF"}
               </button>
             </div>
           )}
@@ -2785,12 +3012,14 @@ function LegacySpreadsheetBoard({
   availability,
   isAdmin,
   profile,
+  viewingOrganisationId,
   onSelect,
 }: {
   items: ScheduleItem[];
   availability: AvailabilityBlock[];
   isAdmin: boolean;
   profile: Profile;
+  viewingOrganisationId?: string;
   onSelect: (id: string) => void;
 }) {
   const rows = [...items].sort((a, b) => {
@@ -2931,6 +3160,7 @@ function SpreadsheetBoard({
   isAdmin,
   masterTemplate,
   profile,
+  viewingOrganisationId,
   language,
   anchorDate,
   onSelectDay,
@@ -2942,6 +3172,7 @@ function SpreadsheetBoard({
   isAdmin: boolean;
   masterTemplate?: boolean;
   profile: Profile;
+  viewingOrganisationId?: string;
   language: Language;
   anchorDate: Date;
   onSelectDay: (date: Date) => void;
@@ -3030,6 +3261,7 @@ function SpreadsheetBoard({
             {rows.map((item, index) => {
               const itemDate = safeDate(item.startsAt);
               const itemEndDate = safeDate(item.endsAt);
+              const notAttending = isNotAttending(item, viewingOrganisationId ?? profile.organisationId);
               const dateKey = itemDate
                 ? format(itemDate, "yyyy-MM-dd")
                 : "unknown";
@@ -3066,8 +3298,7 @@ function SpreadsheetBoard({
                       ? "rejected"
                       : "pending";
               const isPendingDecision =
-                !decision ||
-                ["undecided", "interested", "acknowledged"].includes(decision);
+                !notAttending && (!decision || ["undecided", "interested", "acknowledged"].includes(decision));
               const availabilityConflict = availability.some((block) =>
                 overlaps(
                   block.startsAt,
@@ -3168,6 +3399,7 @@ function SpreadsheetBoard({
                       conflict
                         ? "bg-rose-50/80 hover:bg-rose-100/80"
                         : hasScheduleOverlap && "bg-amber-50/80 hover:bg-amber-100/80",
+                      notAttending && "event-not-attending",
                     )}
                   >
                     <td className="hidden">
@@ -3175,7 +3407,19 @@ function SpreadsheetBoard({
                     </td>
                     <td className="px-4 py-2 align-top font-semibold text-slate-900">
                       <span className="flex items-center gap-2">
-                        {item.title}
+                         {item.eventUrl ? (
+                           <a
+                             href={item.eventUrl}
+                             target="_blank"
+                             rel="noreferrer"
+                             onClick={(event) => event.stopPropagation()}
+                             title={`Open ${item.title} in a new tab`}
+                             className="inline-flex items-center gap-1 text-indigo-700 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-950"
+                           >
+                             {item.title}<ExternalLink className="size-3.5 shrink-0" />
+                           </a>
+                         ) : item.title}
+                         {notAttending && <span className="inline-flex items-center rounded-md bg-slate-200 px-2 py-1 text-[10px] font-bold text-slate-700">Startup not in UK</span>}
                         {conflict && (
                           <span className="urgent-attention inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold ring-2 ring-amber-300 ring-offset-1">
                             <AlertTriangle className="size-3" />
@@ -3212,7 +3456,9 @@ function SpreadsheetBoard({
                       </span>
                     </td>
                     {showDecisionColumn && <td className="px-3 py-2 align-top">
-                      {profile.organisationId && !isGenericBusinessMeetingSlot(item) ? (
+                      {notAttending ? (
+                        <span className="inline-flex rounded-md bg-slate-200 px-2.5 py-1 text-[10px] font-bold text-slate-700">Startup not in UK</span>
+                      ) : profile.organisationId && !isGenericBusinessMeetingSlot(item) ? (
                         <button
                           type="button"
                           onClick={(event) => {
@@ -3337,6 +3583,7 @@ function CalendarBoard({
   availability,
   isAdmin,
   profile,
+  viewingOrganisationId,
   onSelect,
   onSelectDay,
   onCreateAt,
@@ -3347,6 +3594,7 @@ function CalendarBoard({
   availability: AvailabilityBlock[];
   isAdmin: boolean;
   profile: Profile;
+  viewingOrganisationId?: string;
   onSelect: (id: string) => void;
   onSelectDay: (date: Date) => void;
   onCreateAt: (startsAt?: string, endsAt?: string) => void;
@@ -3362,6 +3610,9 @@ function CalendarBoard({
       <MonthBoard
         week={week}
         items={items}
+        profile={profile}
+        viewingOrganisationId={viewingOrganisationId}
+        isAdmin={isAdmin}
         onSelect={onSelect}
         onSelectDay={onSelectDay}
       />
@@ -3373,6 +3624,7 @@ function CalendarBoard({
       availability={availability}
       isAdmin={isAdmin}
       profile={profile}
+      viewingOrganisationId={viewingOrganisationId}
       onSelect={onSelect}
       onSelectDay={onSelectDay}
       onCreateAt={onCreateAt}
@@ -3493,6 +3745,7 @@ function HourlyBoard({
   availability,
   isAdmin,
   profile,
+  viewingOrganisationId,
   onSelect,
   onSelectDay,
   onCreateAt,
@@ -3502,6 +3755,7 @@ function HourlyBoard({
   availability: AvailabilityBlock[];
   isAdmin: boolean;
   profile: Profile;
+  viewingOrganisationId?: string;
   onSelect: (id: string) => void;
   onSelectDay: (date: Date) => void;
   onCreateAt: (startsAt?: string, endsAt?: string) => void;
@@ -3746,6 +4000,7 @@ function HourlyBoard({
                   item={item}
                   isAdmin={isAdmin}
                   profile={profile}
+                  viewingOrganisationId={viewingOrganisationId}
                   availability={availability}
                   scheduleOverlaps={scheduleOverlapsFor(item)}
                   onClick={() => onSelect(item.id)}
@@ -3769,6 +4024,7 @@ function HourlyBoard({
                 item={item}
                 isAdmin={isAdmin}
                 profile={profile}
+                viewingOrganisationId={viewingOrganisationId}
                 onClick={() => onSelect(item.id)}
                 availability={availability}
               />
@@ -3784,6 +4040,7 @@ function TimedEvent({
   item,
   isAdmin,
   profile,
+  viewingOrganisationId,
   availability,
   scheduleOverlaps,
   onClick,
@@ -3792,12 +4049,14 @@ function TimedEvent({
   item: ScheduleItem;
   isAdmin: boolean;
   profile: Profile;
+  viewingOrganisationId?: string;
   availability: AvailabilityBlock[];
   scheduleOverlaps: ScheduleItem[];
   onClick: () => void;
   style: { top: number; height: number; left: string; width: string };
 }) {
   const meta = itemMeta[item.itemType];
+  const notAttending = isNotAttending(item, viewingOrganisationId ?? profile.organisationId);
   const response = item.responses.find(
     (entry) => entry.organisationId === profile.organisationId,
   );
@@ -3816,6 +4075,7 @@ function TimedEvent({
         conflict
           ? "urgent-attention"
           : hasScheduleOverlap && "urgent-attention",
+        notAttending && "event-not-attending",
       )}
       style={style}
     >
@@ -3827,7 +4087,7 @@ function TimedEvent({
         {conflict && (
           <AlertTriangle className="ml-auto size-3 shrink-0 text-rose-600" />
         )}
-        {!conflict && hasScheduleOverlap && (
+        {notAttending ? <span className="ml-auto shrink-0 text-[8px] font-black uppercase tracking-wide text-slate-600">Startup not in UK</span> : !conflict && hasScheduleOverlap && (
           <span title="Time overlap — review both events; you may still be able to attend parts of each." className="ml-auto text-[8px] font-black uppercase tracking-wide text-amber-900">Overlap</span>
         )}
       </div>
@@ -3843,11 +4103,17 @@ function TimedEvent({
 function MonthBoard({
   week,
   items,
+  profile,
+  isAdmin,
+  viewingOrganisationId,
   onSelect,
   onSelectDay,
 }: {
   week: Date;
   items: ScheduleItem[];
+  profile: Profile;
+  isAdmin: boolean;
+  viewingOrganisationId?: string;
   onSelect: (id: string) => void;
   onSelectDay: (date: Date) => void;
 }) {
@@ -3868,7 +4134,7 @@ function MonthBoard({
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === " ") onSelectDay(day);
           }}
-          className={cn(
+                 className={cn(
             "min-h-28 cursor-pointer border-b border-r border-slate-100 p-2",
             day.getMonth() !== week.getMonth() && "bg-slate-50 text-slate-400",
             isToday(day) && "bg-indigo-50/50",
@@ -3893,10 +4159,11 @@ function MonthBoard({
                 }}
                 className={cn(
                   "mt-1 block w-full truncate rounded border px-1.5 py-1 text-left text-[9px] font-semibold text-slate-800",
-                  calendarState(item),
+                   calendarState(item),
+                   isNotAttending(item, viewingOrganisationId ?? profile.organisationId) && "event-not-attending",
                 )}
               >
-                {item.title}
+                {isNotAttending(item, viewingOrganisationId ?? profile.organisationId) ? "Startup not in UK · " : ""}{item.title}
               </button>
             ))}
         </div>
@@ -3910,15 +4177,18 @@ function EventCard({
   onClick,
   isAdmin,
   profile,
+  viewingOrganisationId,
   availability,
 }: {
   item: ScheduleItem;
   onClick: () => void;
   isAdmin: boolean;
   profile: Profile;
+  viewingOrganisationId?: string;
   availability: AvailabilityBlock[];
 }) {
   const meta = itemMeta[item.itemType];
+  const notAttending = isNotAttending(item, viewingOrganisationId ?? profile.organisationId);
   const response = item.responses.find(
     (entry) => entry.organisationId === profile.organisationId,
   );
@@ -3928,6 +4198,7 @@ function EventCard({
       overlaps(block.startsAt, block.endsAt, item.startsAt, item.endsAt),
   );
   const decisionPending =
+    !notAttending &&
     item.status !== "confirmed" &&
     !["going", "acknowledged"].includes(response?.decision ?? "");
   return (
@@ -3937,6 +4208,7 @@ function EventCard({
         "w-full rounded-xl border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-md",
         calendarState(item, response?.decision),
         (decisionPending || conflict) && "urgent-attention",
+        notAttending && "event-not-attending",
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -3949,7 +4221,7 @@ function EventCard({
           <span className={cn("size-1.5 rounded-full", meta.dot)} />
           {meta.label}
         </span>
-        {decisionPending && (
+        {notAttending ? <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-bold text-slate-700">Startup not in UK</span> : decisionPending && (
           <span className="urgent-attention rounded px-1.5 py-0.5 text-[9px] font-bold">
             Decision pending
           </span>
@@ -4061,6 +4333,9 @@ function BusinessMeetingColumnHeader({
 function WeeklyProgrammeRecordPage({ items, organisationNames }: { items: ScheduleItem[]; organisationNames: Record<string, string> }) {
   const [startupId, setStartupId] = useState("all");
   const [weekKey, setWeekKey] = useState("2026-09-14");
+  const [rangeMode, setRangeMode] = useState<"week" | "custom">("week");
+  const [customStartDate, setCustomStartDate] = useState("2026-09-28");
+  const [customEndDate, setCustomEndDate] = useState("2026-10-23");
   const [exporting, setExporting] = useState<"excel" | "pdf" | null>(null);
   const weeks = useMemo(() => {
     const programmeStart = new Date(2026, 8, 14);
@@ -4074,16 +4349,26 @@ function WeeklyProgrammeRecordPage({ items, organisationNames }: { items: Schedu
   }, []);
   const startupOptions = useMemo(() => Array.from(new Set(items.flatMap((item) => item.organisationIds))).map((id) => ({ id, name: organisationNames[id] ?? "Startup" })).sort((a, b) => a.name.localeCompare(b.name)), [items, organisationNames]);
   const week = weeks.find((entry) => entry.key === weekKey) ?? weeks[0];
+  const customRangeIsValid = customStartDate <= customEndDate;
+  const range = rangeMode === "week"
+    ? week
+    : customRangeIsValid
+      ? {
+          start: startOfDay(new Date(`${customStartDate}T00:00:00`)),
+          end: new Date(`${customEndDate}T23:59:59`),
+          label: `${format(new Date(`${customStartDate}T00:00:00`), "d MMM")} – ${format(new Date(`${customEndDate}T00:00:00`), "d MMM yyyy")}`,
+        }
+      : undefined;
   const rows = useMemo(() => {
-    if (!week) return [];
+    if (!range) return [];
     return items.filter((item) => {
       if (item.itemType === "business_meeting" || !item.startsAt) return false;
       const date = new Date(item.startsAt);
-      const inWeek = date >= week.start && date <= week.end;
+      const inRange = date >= range.start && date <= range.end;
       const forStartup = startupId === "all" || item.organisationIds.length === 0 || item.organisationIds.includes(startupId);
-      return inWeek && forStartup;
+      return inRange && forStartup;
     }).sort((a, b) => (a.startsAt ?? "").localeCompare(b.startsAt ?? ""));
-  }, [items, startupId, week]);
+  }, [items, startupId, range]);
   const reportRows = rows.map((item) => {
     const response = startupId === "all" ? undefined : item.responses.find((entry) => entry.organisationId === startupId);
     const declined = item.status === "cancelled" || response?.decision === "pass";
@@ -4103,21 +4388,21 @@ function WeeklyProgrammeRecordPage({ items, organisationNames }: { items: Schedu
   const greyed = reportRows.length - active;
   const startupName = startupId === "all" ? "Programme overview" : organisationNames[startupId] ?? "Startup";
   const doExport = async (kind: "excel" | "pdf") => {
-    if (!week || startupId === "all") return;
+    if (!range || startupId === "all") return;
     setExporting(kind);
     try {
       const exporters = await import("./lib/export");
-      const meta = { startupName, weekLabel: `Week commencing ${week.label}` };
+      const meta = { startupName, weekLabel: `${rangeMode === "week" ? "Weekly" : "Custom-period"} snapshot: ${range.label}` };
       if (kind === "excel") await exporters.exportWeeklyScheduleExcel(reportRows, meta);
       else exporters.exportWeeklySchedulePdf(reportRows, meta);
     } finally { setExporting(null); }
   };
   return <div>
     <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">Admin workspace</p>
-    <div className="mt-1"><h1 className="text-3xl font-semibold tracking-tight">Programme Record</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Weekly schedule snapshots for backup, review and sponsor-ready reporting. Declined and cancelled records stay visible as greyed audit entries.</p></div>
-    <section className="mt-6 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5"><div className="grid gap-4 md:grid-cols-2"><label><FieldLabel>Week commencing</FieldLabel><Select value={weekKey} onChange={(event) => setWeekKey(event.target.value)}>{weeks.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}</Select></label><label><FieldLabel>Schedule for</FieldLabel><Select value={startupId} onChange={(event) => setStartupId(event.target.value)}><option value="all">Choose all startups (overview)</option>{startupOptions.map((startup) => <option key={startup.id} value={startup.id}>{startup.name}</option>)}</Select></label></div><p className="mt-3 text-xs leading-5 text-indigo-950">Exports are kept separate by startup so attendance times are never incorrectly merged into one programme timetable.</p></section>
-    <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-3xl font-bold text-indigo-700">{reportRows.length}</p><p className="mt-1 text-sm font-semibold text-slate-600">Events in this week</p></div><div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-3xl font-bold text-emerald-700">{active}</p><p className="mt-1 text-sm font-semibold text-slate-600">Active schedule entries</p></div><div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-3xl font-bold text-slate-500">{greyed}</p><p className="mt-1 text-sm font-semibold text-slate-600">Declined / cancelled retained</p></div><div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-3xl font-bold text-slate-900">{new Set(reportRows.map((row) => row.date)).size}</p><p className="mt-1 text-sm font-semibold text-slate-600">Days with activity</p></div></section>
-    <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Export weekly snapshot</h2><p className="mt-1 text-sm text-slate-500">{startupName} · {week?.label ?? ""} · {reportRows.length} schedule entries</p>{startupId === "all" && <p className="mt-1 text-xs font-semibold text-amber-700">Select one startup above to export its separate schedule.</p>}</div><div className="flex gap-2"><Button type="button" variant="secondary" disabled={Boolean(exporting) || startupId === "all"} onClick={() => void doExport("excel")}><Download className="mr-1.5 size-4" />{exporting === "excel" ? "Preparing…" : "Schedule spreadsheet"}</Button><Button type="button" variant="indigo" disabled={Boolean(exporting) || startupId === "all"} onClick={() => void doExport("pdf")}><FileDown className="mr-1.5 size-4" />{exporting === "pdf" ? "Preparing…" : "Calendar PDF"}</Button></div></div></section>
+    <div className="mt-1"><h1 className="text-3xl font-semibold tracking-tight">Programme Record</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Create a point-in-time backup of a chosen week or custom programme period. It captures the schedule as it stands when you export it, so an export from w/c 14 September can be compared with one from w/c 5 October for the same 28 September–23 October programme period.</p></div>
+    <section className="mt-6 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5"><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"><label><FieldLabel>Snapshot period</FieldLabel><Select value={rangeMode} onChange={(event) => setRangeMode(event.target.value as "week" | "custom")}><option value="week">One programme week</option><option value="custom">Custom date range</option></Select></label>{rangeMode === "week" ? <label><FieldLabel>Week commencing</FieldLabel><Select value={weekKey} onChange={(event) => setWeekKey(event.target.value)}>{weeks.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}</Select></label> : <><label><FieldLabel>Start date</FieldLabel><Input type="date" value={customStartDate} onChange={(event) => setCustomStartDate(event.target.value)} /></label><label><FieldLabel>End date</FieldLabel><Input type="date" min={customStartDate} value={customEndDate} onChange={(event) => setCustomEndDate(event.target.value)} /></label></>}<label><FieldLabel>Schedule for</FieldLabel><Select value={startupId} onChange={(event) => setStartupId(event.target.value)}><option value="all">Choose all startups (overview)</option>{startupOptions.map((startup) => <option key={startup.id} value={startup.id}>{startup.name}</option>)}</Select></label></div><p className="mt-3 text-xs leading-5 text-indigo-950"><strong>What this page is for:</strong> each export is a dated record of the live schedule at that moment. It is not a live report that changes afterwards. Exports remain separate by startup so attendance times are never incorrectly merged into one programme timetable.</p>{rangeMode === "custom" && !customRangeIsValid && <p className="mt-2 text-xs font-semibold text-rose-700">Choose an end date on or after the start date.</p>}</section>
+    <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-3xl font-bold text-indigo-700">{reportRows.length}</p><p className="mt-1 text-sm font-semibold text-slate-600">Events in selected period</p></div><div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-3xl font-bold text-emerald-700">{active}</p><p className="mt-1 text-sm font-semibold text-slate-600">Active schedule entries</p></div><div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-3xl font-bold text-slate-500">{greyed}</p><p className="mt-1 text-sm font-semibold text-slate-600">Declined / cancelled retained</p></div><div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-3xl font-bold text-slate-900">{new Set(reportRows.map((row) => row.date)).size}</p><p className="mt-1 text-sm font-semibold text-slate-600">Days with activity</p></div></section>
+    <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Export point-in-time snapshot</h2><p className="mt-1 text-sm text-slate-500">{startupName} · {range?.label ?? "Choose valid dates"} · {reportRows.length} schedule entries</p>{startupId === "all" && <p className="mt-1 text-xs font-semibold text-amber-700">Select one startup above to export its separate schedule.</p>}</div><div className="flex gap-2"><Button type="button" variant="secondary" disabled={Boolean(exporting) || startupId === "all" || !range} onClick={() => void doExport("excel")}><Download className="mr-1.5 size-4" />{exporting === "excel" ? "Preparing…" : "Schedule spreadsheet"}</Button><Button type="button" variant="indigo" disabled={Boolean(exporting) || startupId === "all" || !range} onClick={() => void doExport("pdf")}><FileDown className="mr-1.5 size-4" />{exporting === "pdf" ? "Preparing…" : "Calendar PDF"}</Button></div></div></section>
     <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="overflow-x-auto"><table className="min-w-[980px] w-full text-left text-sm"><thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-[.1em] text-slate-500"><tr><th className="px-4 py-3">Event</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Time</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Location</th><th className="px-4 py-3">Attendance</th><th className="px-4 py-3">Notes</th></tr></thead><tbody className="divide-y divide-slate-100">{reportRows.map((row) => <tr key={`${row.date}-${row.title}`} className={row.greyed ? "bg-slate-100 text-slate-400 line-through" : ""}><td className="px-4 py-3 font-semibold">{row.title}</td><td className="px-4 py-3">{row.date}</td><td className="px-4 py-3">{row.time}</td><td className="px-4 py-3">{row.type}</td><td className="px-4 py-3">{row.location}</td><td className="px-4 py-3">{row.attendance}</td><td className="px-4 py-3 no-underline">{row.notes}</td></tr>)}{!reportRows.length && <tr><td colSpan={7} className="p-10 text-center text-sm text-slate-500">No schedule entries for this startup and week.</td></tr>}</tbody></table></div></section>
   </div>;
 }
@@ -4160,7 +4445,7 @@ function ProgrammeRecordPage({ items, potentialMeetings, organisationNames }: { 
     {selectedStartup ? <><div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{startupMetrics.map((metric) => <section key={metric.label} className="rounded-2xl border border-slate-200 bg-white p-4"><p className={cn("text-3xl font-bold", metric.tone)}>{metric.value}</p><p className="mt-1 text-sm font-semibold text-slate-600">{metric.label}</p></section>)}</div><div className="mt-5 grid gap-5 xl:grid-cols-2"><ProgrammeRecordList title="Everything LVCN proposed" description="All targeted and cohort schedule items, including cancelled records, plus every Potential Biz Meet considered for this startup." scheduleItems={proposedForStartup} potentialMeetings={potentialForStartup} responseFor={responseFor} /><ProgrammeRecordList title="Finalised for this startup" description="Confirmed schedule items accepted by the startup, and agreed business introductions accepted by the startup." scheduleItems={finalSchedule} potentialMeetings={finalPotential} responseFor={responseFor} finalOnly /></div></> : <><div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{metrics.map((metric) => <section key={metric.label} className="rounded-2xl border border-slate-200 bg-white p-4"><p className={cn("text-3xl font-bold", metric.tone)}>{metric.value}</p><p className="mt-1 text-sm font-semibold text-slate-600">{metric.label}</p></section>)}</div><div className="mt-6 flex flex-wrap gap-2">{(["all", "proposed", "confirmed", "cancelled"] as const).map((option) => <button key={option} type="button" onClick={() => setStatus(option)} className={cn("rounded-full border px-3 py-1.5 text-xs font-bold", status === option ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600")}>{option === "all" ? "All items" : pretty(option)}</button>)}</div><section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="max-h-[38rem] overflow-auto"><table className="min-w-[860px] w-full text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-[10px] font-bold uppercase tracking-[.1em] text-slate-500"><tr><th className="px-4 py-3">Item</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Target startups</th><th className="px-4 py-3">Responses</th></tr></thead><tbody className="divide-y divide-slate-100">{visible.map((item) => <tr key={item.id}><td className="px-4 py-3"><p className="font-semibold text-slate-900">{item.title}</p><p className="mt-1 text-xs text-slate-500">{itemMeta[item.itemType].label}</p></td><td className="px-4 py-3 text-xs text-slate-600">{dateLabel(item)}</td><td className="px-4 py-3"><span className={cn("rounded-full px-2 py-1 text-[10px] font-bold", item.status === "confirmed" ? "bg-emerald-100 text-emerald-800" : item.status === "cancelled" ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800")}>{pretty(item.status)}</span></td><td className="px-4 py-3 text-xs text-slate-600">{item.organisationIds.length ? item.organisationIds.map((id) => organisationNames[id] ?? "Startup").join(", ") : "Cohort"}</td><td className="px-4 py-3 text-xs text-slate-600">{item.responses.filter((response) => response.decision === "going").length} accepted · {item.responses.filter((response) => response.decision === "pass").length} declined · {item.responses.filter((response) => response.decision === "undecided").length} pending</td></tr>)}{!visible.length && <tr><td colSpan={5} className="p-8 text-center text-slate-500">No items match this status.</td></tr>}</tbody></table></div></section></>}</div>;
 }
 
-function StartupUpdatesPage({ updates, schemaReady, isAdmin, organisationNames, onMarkAllRead, onSend }: { updates: StartupUpdate[]; schemaReady: boolean; isAdmin: boolean; organisationNames: Record<string, string>; onMarkAllRead: () => void; onSend: (organisationId: string, title: string, body: string) => void }) {
+function StartupUpdatesPage({ updates, schemaReady, isAdmin, organisationNames, onMarkAllRead, onSend, language }: { updates: StartupUpdate[]; schemaReady: boolean; isAdmin: boolean; organisationNames: Record<string, string>; onMarkAllRead: () => void; onSend: (organisationId: string, title: string, body: string) => void; language: Language }) {
   const [kind, setKind] = useState<"all" | StartupUpdate["kind"]>("all");
   const [recipient, setRecipient] = useState("");
   const [title, setTitle] = useState("");
@@ -4168,12 +4453,13 @@ function StartupUpdatesPage({ updates, schemaReady, isAdmin, organisationNames, 
   const visible = updates.filter((update) => !update.readAt && (kind === "all" || update.kind === kind)).slice(0, 30);
   const unread = updates.filter((update) => !update.readAt).length;
   const tone = (update: StartupUpdate) => update.kind === "schedule" ? "border-indigo-200 bg-indigo-50/60 text-indigo-800" : update.kind === "potential_biz_meet" ? "border-emerald-200 bg-emerald-50/60 text-emerald-800" : "border-amber-200 bg-amber-50/60 text-amber-800";
-  const label = (value: StartupUpdate["kind"]) => value === "schedule" ? "Schedule" : value === "potential_biz_meet" ? "Potential Biz Meet" : "Admin message";
+  const ko = language === "ko";
+  const label = (value: StartupUpdate["kind"]) => value === "schedule" ? (ko ? "\uC77C\uC815" : "Schedule") : value === "potential_biz_meet" ? (ko ? "\uC7A0\uC7AC \uBE44\uC988\uB2C8\uC2A4 \uBBF8\uD305" : "Potential Biz Meet") : (ko ? "\uAD00\uB9AC\uC790 \uBA54\uC2DC\uC9C0" : "Admin message");
   const recipients = Object.entries(organisationNames).sort(([, a], [, b]) => a.localeCompare(b));
-  return <div><p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">{isAdmin ? "Admin workspace" : "Programme communications"}</p><div className="mt-1 flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-3xl font-semibold tracking-tight">Startup Updates</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Your action inbox: it shows at most 30 current updates. Once read, an update leaves this page; the programme record remains available to LVCN.</p></div>{!isAdmin && unread > 0 && <Button type="button" variant="secondary" onClick={onMarkAllRead}>Clear {unread} update{unread === 1 ? "" : "s"}</Button>}</div>
-    {!schemaReady ? <section className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm leading-6 text-amber-950"><strong>Updates are ready in the app, but the database migration has not been applied yet.</strong><p className="mt-1">Apply <code>supabase/migrations/202609170024_startup_updates_inbox.sql</code> when you are ready. Until then, existing schedule and Potential Biz Meet pages continue to work normally.</p></section> : <><div className="mt-6 flex flex-wrap gap-2">{(["all", "schedule", "potential_biz_meet", "admin_message"] as const).map((option) => <button key={option} type="button" onClick={() => setKind(option)} className={cn("rounded-full border px-3 py-1.5 text-xs font-bold", kind === option ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600")}>{option === "all" ? "All updates" : label(option)}</button>)}</div>
-      {isAdmin && <section className="mt-5 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5"><h2 className="font-semibold text-indigo-950">Send an admin message</h2><p className="mt-1 text-sm text-indigo-900">This creates a permanent, startup-visible update. Use it for information that should not be lost in a decision thread.</p><div className="mt-4 grid gap-3 sm:grid-cols-2"><label><FieldLabel>Startup</FieldLabel><Select value={recipient} onChange={(event) => setRecipient(event.target.value)}><option value="">Choose a startup</option>{recipients.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</Select></label><label><FieldLabel>Subject</FieldLabel><Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Programme update" /></label><label className="sm:col-span-2 text-sm font-semibold text-slate-700">Message<textarea value={body} onChange={(event) => setBody(event.target.value)} className="mt-1 min-h-20 w-full rounded-lg border border-slate-200 bg-white p-3 text-sm" placeholder="What the startup needs to know" /></label></div><Button type="button" variant="indigo" className="mt-3" disabled={!recipient || !title.trim()} onClick={() => { onSend(recipient, title.trim(), body.trim()); setTitle(""); setBody(""); }}>Send update</Button></section>}
-      <section className="mt-5 divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white">{visible.map((update) => <article key={update.id} className={cn("border-l-4 p-5", update.readAt ? "border-l-slate-200" : "border-l-amber-400", !update.readAt && "bg-amber-50/30")}><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><span className={cn("rounded-full border px-2 py-1 text-[10px] font-bold", tone(update))}>{label(update.kind)}</span>{isAdmin && <span className="text-xs font-semibold text-slate-500">{organisationNames[update.organisationId] ?? "Startup"}</span>}{!update.readAt && <span className="rounded-full bg-amber-200 px-2 py-1 text-[10px] font-bold text-amber-950">New</span>}</div><h2 className="mt-2 font-semibold text-slate-950">{update.title}</h2>{update.body && <p className="mt-2 max-w-3xl whitespace-pre-wrap text-sm leading-6 text-slate-600">{update.body}</p>}</div><time className="text-xs text-slate-500">{format(new Date(update.createdAt), "d MMM yyyy, HH:mm")}</time></div></article>)}{!visible.length && <p className="p-10 text-center text-sm text-slate-500">No updates in this view yet.</p>}</section></>}</div>;
+  return <div><p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">{isAdmin ? (ko ? "\uAD00\uB9AC\uC790 \uC791\uC5C5 \uACF5\uAC04" : "Admin workspace") : (ko ? "\uD504\uB85C\uADF8\uB7A8 \uC548\uB0B4" : "Programme communications")}</p><div className="mt-1 flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-3xl font-semibold tracking-tight">{ko ? "\uC2A4\uD0C0\uD2B8\uC5C5 \uC5C5\uB370\uC774\uD2B8" : "Startup Updates"}</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">{ko ? "\uC561\uC158 \uC218\uC2E0\uD568\uC785\uB2C8\uB2E4. \uC77D\uC740 \uC5C5\uB370\uC774\uD2B8\uB294 \uC774 \uD398\uC774\uC9C0\uC5D0\uC11C \uC0AC\uB77C\uC9C0\uC9C0\uB9CC, \ud504\ub85c\uadf8\ub7a8 \uae30\ub85d\uc740 LVCN\uc5d0 \uacc4\uc18d \ub0a8\uc2b5\ub2c8\ub2e4." : "Your action inbox: it shows at most 30 current updates. Once read, an update leaves this page; the programme record remains available to LVCN."}</p></div>{!isAdmin && unread > 0 && <Button type="button" variant="secondary" onClick={onMarkAllRead}>{ko ? `\uC5C5\uB370\uC774\uD2B8 ${unread}\uAC1C \uC9C0\uC6B0\uAE30` : `Clear ${unread} update${unread === 1 ? "" : "s"}`}</Button>}</div>
+    {!schemaReady ? <section className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm leading-6 text-amber-950"><strong>{ko ? "\uC5C5\uB370\uC774\uD2B8 \uAE30\uB2A5\uC740 \uC900\uBE44\uB418\uC5C8\uC9C0\uB9CC \uB370\uC774\uD130\uBCA0\uC774\uC2A4 \uC774\uAD00\uC774 \uC544\uC9C1 \uC801\uC6A9\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." : "Updates are ready in the app, but the database migration has not been applied yet."}</strong><p className="mt-1">{ko ? "\uC774\uAD00\uc744 \uc801\uc6a9\ud55c \ub4a4 \uc5c5\ub370\uc774\ud2b8 \uc218\uc2e0\ud568\uc744 \uc0ac\uc6a9\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4." : "Apply supabase/migrations/202609170024_startup_updates_inbox.sql when you are ready."}</p></section> : <><div className="mt-6 flex flex-wrap gap-2">{(["all", "schedule", "potential_biz_meet", "admin_message"] as const).map((option) => <button key={option} type="button" onClick={() => setKind(option)} className={cn("rounded-full border px-3 py-1.5 text-xs font-bold", kind === option ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600")}>{option === "all" ? (ko ? "\uBAA8\uB4E0 \uC5C5\uB370\uC774\uD2B8" : "All updates") : label(option)}</button>)}</div>
+      {isAdmin && <section className="mt-5 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5"><h2 className="font-semibold text-indigo-950">{ko ? "\uAD00\uB9AC\uC790 \uBA54\uC2DC\uC9C0 \uBCF4\uB0B4\uAE30" : "Send an admin message"}</h2><p className="mt-1 text-sm text-indigo-900">{ko ? "\uc2a4\ud0c0\ud2b8\uc5c5\uc5d0 \uacc4\uc18d \ubcf4\uc774\ub294 \uc5c5\ub370\uc774\ud2b8\ub97c \uc0dd\uc131\ud569\ub2c8\ub2e4." : "This creates a permanent, startup-visible update."}</p><div className="mt-4 grid gap-3 sm:grid-cols-2"><label><FieldLabel>{ko ? "\uC2A4\uD0C0\uD2B8\uC5C5" : "Startup"}</FieldLabel><Select value={recipient} onChange={(event) => setRecipient(event.target.value)}><option value="">{ko ? "\uC2A4\uD0C0\uD2B8\uC5C5 \uC120\uD0DD" : "Choose a startup"}</option>{recipients.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</Select></label><label><FieldLabel>{ko ? "\uC81C\uBAA9" : "Subject"}</FieldLabel><Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={ko ? "\ud504\ub85c\uadf8\ub7a8 \uc5c5\ub370\uc774\ud2b8" : "Programme update"} /></label><label className="sm:col-span-2 text-sm font-semibold text-slate-700">{ko ? "\uBA54\uC2DC\uC9C0" : "Message"}<textarea value={body} onChange={(event) => setBody(event.target.value)} className="mt-1 min-h-20 w-full rounded-lg border border-slate-200 bg-white p-3 text-sm" placeholder={ko ? "\uc2a4\ud0c0\ud2b8\uc5c5\uc774 \uc54c\uc544\uc57c \ud560 \ub0b4\uc6a9" : "What the startup needs to know"} /></label></div><Button type="button" variant="indigo" className="mt-3" disabled={!recipient || !title.trim()} onClick={() => { onSend(recipient, title.trim(), body.trim()); setTitle(""); setBody(""); }}>{ko ? "\uC5C5\uB370\uC774\uD2B8 \uBCF4\uB0B4\uAE30" : "Send update"}</Button></section>}
+      <section className="mt-5 divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white">{visible.map((update) => <article key={update.id} className={cn("border-l-4 p-5", update.readAt ? "border-l-slate-200" : "border-l-amber-400", !update.readAt && "bg-amber-50/30")}><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><span className={cn("rounded-full border px-2 py-1 text-[10px] font-bold", tone(update))}>{label(update.kind)}</span>{isAdmin && <span className="text-xs font-semibold text-slate-500">{organisationNames[update.organisationId] ?? (ko ? "\uC2A4\uD0C0\uD2B8\uC5C5" : "Startup")}</span>}{!update.readAt && <span className="rounded-full bg-amber-200 px-2 py-1 text-[10px] font-bold text-amber-950">{ko ? "\uC0C8\uB85C\uC6B4 \uC18C\uC2DD" : "New"}</span>}</div><h2 className="mt-2 font-semibold text-slate-950">{update.title}</h2>{update.body && <p className="mt-2 max-w-3xl whitespace-pre-wrap text-sm leading-6 text-slate-600">{update.body}</p>}</div><time className="text-xs text-slate-500">{format(new Date(update.createdAt), "d MMM yyyy, HH:mm")}</time></div></article>)}{!visible.length && <p className="p-10 text-center text-sm text-slate-500">{ko ? "\uC544\uC9C1 \uD45C\uC2DC\uD560 \uC5C5\uB370\uC774\uD2B8\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4." : "No updates in this view yet."}</p>}</section></>}</div>;
 }
 
 function ProgrammeRecordList({ title, description, scheduleItems, potentialMeetings, responseFor, finalOnly = false }: { title: string; description: string; scheduleItems: ScheduleItem[]; potentialMeetings: PotentialMeeting[]; responseFor: (item: ScheduleItem) => ScheduleItem["responses"][number] | undefined; finalOnly?: boolean }) {
@@ -4184,7 +4470,7 @@ function ProgrammeRecordList({ title, description, scheduleItems, potentialMeeti
 
 function AdminHubPage({ items, potentialMeetings, onOpenSchedule, onOpenInbox, onOpenMeetings, onOpenDecisions, onOpenReport, onOpenUpdates }: { items: ScheduleItem[]; potentialMeetings: PotentialMeeting[]; onOpenSchedule: () => void; onOpenInbox: () => void; onOpenMeetings: () => void; onOpenDecisions: () => void; onOpenReport: () => void; onOpenUpdates: () => void; }) {
   const pendingScheduleUpdates = items.flatMap((item) => item.responses).filter((response) => (response.decision !== "undecided" || response.note) && !response.adminReviewedAt).length;
-  const pendingPotentialUpdates = potentialMeetings.filter((meeting) => meeting.decision !== "undecided" && !meeting.adminReviewedAt).length;
+  const pendingPotentialUpdates = potentialMeetings.filter((meeting) => (meeting.decision !== "undecided" || meeting.priorityRating) && !meeting.adminReviewedAt).length;
   const pendingActions = pendingScheduleUpdates + pendingPotentialUpdates;
   const inboxDescription = pendingActions
     ? `${pendingActions} update${pendingActions === 1 ? "" : "s"} need review (${pendingScheduleUpdates} schedule, ${pendingPotentialUpdates} Potential Biz Meet). Marking an update reviewed clears it from the working queue.`
@@ -4205,7 +4491,7 @@ function AdminHubPage({ items, potentialMeetings, onOpenSchedule, onOpenInbox, o
       </div>
     </section>
     <div className="mt-7 flex items-end justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-950">Workspaces</h2><p className="mt-1 text-sm text-slate-500">Start with the schedule, then follow the inbox when companies respond.</p></div><span className="hidden rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500 sm:inline">6 admin tools</span></div>
-    <div className="mt-4 grid gap-4 lg:grid-cols-2"><AdminHubGuide number="01" title="Schedule" description="Create and update programme events, target them to the right startups, check dates, costs and conflicts, and control what companies can see." action="Open schedule" onOpen={onOpenSchedule} tone="indigo" /><AdminHubGuide number="02" title="Potential Biz Meets" description="Create one-to-one institutional opportunities, set the LVCN relationship status, and review each startup’s decision." action="Open Potential Biz Meets" onOpen={onOpenMeetings} tone="emerald" /><AdminHubGuide number="03" title="Action inbox" description={inboxDescription} action="Open action inbox" onOpen={onOpenInbox} tone={pendingActions ? "amber" : "slate"} /><AdminHubGuide number="04" title="Startup Updates" description="Send and review durable messages that remain visible outside an individual schedule decision." action="Open Startup Updates" onOpen={onOpenUpdates} tone="slate" /><AdminHubGuide number="05" title="Programme Record" description="Build a weekly snapshot for one startup, retain declined events for audit, and export a spreadsheet or calendar PDF." action="Open Programme Record" onOpen={onOpenReport} tone="slate" /><AdminHubGuide number="06" title="Cohort Retention" description="See how each company is responding and how consistently its invited users return to the programme board." action="Open Cohort Retention" onOpen={onOpenDecisions} tone="slate" /></div>
+    <div className="mt-4 grid gap-4 lg:grid-cols-2"><AdminHubGuide number="01" title="Schedule" description="Create and update programme events, target them to the right startups, check dates, costs and conflicts, and control what companies can see." action="Open schedule" onOpen={onOpenSchedule} tone="indigo" /><AdminHubGuide number="02" title="Potential Biz Meets" description="Create one-to-one institutional opportunities, set the LVCN relationship status, and review each startup’s decision." action="Open Potential Biz Meets" onOpen={onOpenMeetings} tone="emerald" /><AdminHubGuide number="03" title="Action inbox" description={inboxDescription} action="Open action inbox" onOpen={onOpenInbox} tone="amber" /><AdminHubGuide number="04" title="Startup Updates" description="Send and review durable messages that remain visible outside an individual schedule decision." action="Open Startup Updates" onOpen={onOpenUpdates} tone="violet" /><AdminHubGuide number="05" title="Programme Record" description="Build a weekly snapshot for one startup, retain declined events for audit, and export a spreadsheet or calendar PDF." action="Open Programme Record" onOpen={onOpenReport} tone="sky" /><AdminHubGuide number="06" title="Cohort Retention" description="See how each company is responding and how consistently its invited users return to the programme board." action="Open Cohort Retention" onOpen={onOpenDecisions} tone="rose" /></div>
   </div>;
 }
 
@@ -4213,11 +4499,14 @@ function HubStat({ label, value, alert = false }: { label: string; value: number
   return <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur"><p className={cn("text-2xl font-bold", alert && "text-amber-200")}>{value}</p><p className="mt-0.5 text-xs font-medium text-indigo-100">{label}</p></div>;
 }
 
-function AdminHubGuide({ number, title, description, action, onOpen, tone }: { number: string; title: string; description: string; action: string; onOpen: () => void; tone: "amber" | "emerald" | "indigo" | "slate"; }) {
+function AdminHubGuide({ number, title, description, action, onOpen, tone }: { number: string; title: string; description: string; action: string; onOpen: () => void; tone: "amber" | "emerald" | "indigo" | "slate" | "violet" | "sky" | "rose"; }) {
   const styles = {
     amber: { card: "border-amber-200 bg-amber-50/70 hover:border-amber-300", icon: "bg-amber-100 text-amber-800", label: "Needs attention" },
     emerald: { card: "border-emerald-200 bg-emerald-50/60 hover:border-emerald-300", icon: "bg-emerald-100 text-emerald-800", label: "Relationships" },
     indigo: { card: "border-indigo-200 bg-indigo-50/70 hover:border-indigo-300", icon: "bg-indigo-100 text-indigo-800", label: "Plan the programme" },
+    violet: { card: "border-violet-200 bg-violet-50/70 hover:border-violet-300", icon: "bg-violet-100 text-violet-800", label: "Communicate clearly" },
+    sky: { card: "border-sky-200 bg-sky-50/70 hover:border-sky-300", icon: "bg-sky-100 text-sky-800", label: "Report with confidence" },
+    rose: { card: "border-rose-200 bg-rose-50/70 hover:border-rose-300", icon: "bg-rose-100 text-rose-800", label: "Monitor engagement" },
     slate: { card: "border-slate-200 bg-white hover:border-indigo-200", icon: "bg-slate-100 text-slate-700", label: "Review and communicate" },
   }[tone];
   const Icon = title === "Schedule" ? CalendarDays : title === "Potential Biz Meets" ? Link2 : title === "Action inbox" ? Bell : title === "Startup Updates" ? CircleHelp : title === "Programme Record" ? FileDown : LayoutList;
@@ -4228,24 +4517,24 @@ function AdminHubGuide({ number, title, description, action, onOpen, tone }: { n
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function AdminInboxPage({ items, potentialMeetings, organisationNames, onReviewEvent, onReviewPotential, onOpenPotential }: { items: ScheduleItem[]; potentialMeetings: PotentialMeeting[]; organisationNames: Record<string, string>; onReviewEvent: (item: ScheduleItem, response: ScheduleItem["responses"][number]) => void; onReviewPotential: (meeting: PotentialMeeting) => void; onOpenPotential: () => void; }) {
   const eventUpdates = items.flatMap((item) => item.responses.filter((response) => (response.decision !== "undecided" || response.note) && !response.adminReviewedAt).map((response) => ({ item, response })));
-  const potentialUpdates = potentialMeetings.filter((meeting) => meeting.decision !== "undecided" && !meeting.adminReviewedAt);
+  const potentialUpdates = potentialMeetings.filter((meeting) => (meeting.decision !== "undecided" || meeting.priorityRating) && !meeting.adminReviewedAt);
   const organisationName = (id: string) => organisationNames[id] ?? organisations.find((organisation) => organisation.id === id)?.name ?? "Unknown startup";
   return <div><p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">Admin workspace</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Action inbox</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Only startup decisions and messages requiring LVCN follow-up appear here. Reviewing an item clears its badge; a later startup update returns it to the inbox.</p><div className="mt-6 grid gap-5 lg:grid-cols-2"><section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Schedule decisions & messages <Badge className="ml-2">{eventUpdates.length}</Badge></h2><div className="mt-4 space-y-3">{eventUpdates.map(({ item, response }) => <article key={`${item.id}-${response.organisationId}`} className="rounded-xl border border-slate-200 p-3"><p className="text-sm text-slate-800"><strong>{organisationName(response.organisationId)}</strong> {response.decision === "going" ? "confirmed" : response.decision === "pass" ? "rejected" : "updated"} <strong>{item.title}</strong>.</p>{response.note && <p className="mt-2 rounded-lg bg-indigo-50 p-2 text-sm text-indigo-950">“{response.note}”</p>}<Button size="sm" type="button" variant="secondary" className="mt-3" onClick={() => onReviewEvent(item, response)}>Mark reviewed</Button></article>)}{!eventUpdates.length && <p className="py-6 text-center text-sm text-slate-500">No new schedule decisions or messages.</p>}</div></section><section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Potential Biz Meets <Badge className="ml-2">{potentialUpdates.length}</Badge></h2><div className="mt-4 space-y-3">{potentialUpdates.map((meeting) => <article key={meeting.id} className="rounded-xl border border-slate-200 p-3"><p className="text-sm text-slate-800"><strong>{organisationName(meeting.organisationId)}</strong> {meeting.decision === "going" ? "accepted" : "declined"} <strong>{meeting.institutionName}</strong>.</p><div className="mt-3 flex gap-2"><Button size="sm" type="button" variant="secondary" onClick={onOpenPotential}>Open potential meet</Button><Button size="sm" type="button" variant="ghost" onClick={() => onReviewPotential(meeting)}>Mark reviewed</Button></div></article>)}{!potentialUpdates.length && <p className="py-6 text-center text-sm text-slate-500">No new Potential Biz Meet decisions.</p>}</div></section></div></div>;
 }
 
 function AdminInboxQueuePage({ items, potentialMeetings, availability, organisationNames, onReplyEvent, onResolveEvent, onReviewPotential, onReviewAvailability, onOpenPotential }: { items: ScheduleItem[]; potentialMeetings: PotentialMeeting[]; availability: AvailabilityBlock[]; organisationNames: Record<string, string>; onReplyEvent: (item: ScheduleItem, response: ScheduleItem["responses"][number], body: string, status: AdminResponseStatus) => void; onResolveEvent: (item: ScheduleItem, response: ScheduleItem["responses"][number]) => void; onReviewPotential: (meeting: PotentialMeeting) => void; onReviewAvailability: (block: AvailabilityBlock) => void; onOpenPotential: () => void; }) {
-  const [filter, setFilter] = useState<"all" | "accepted" | "declined" | "messages" | "availability">("all");
+  const [filter, setFilter] = useState<"all" | "accepted" | "declined" | "messages" | "rating" | "availability">("all");
   const [replying, setReplying] = useState<{ item: ScheduleItem; response: ScheduleItem["responses"][number] }>();
   const organisationName = (id: string) => organisationNames[id] ?? organisations.find((organisation) => organisation.id === id)?.name ?? "Unknown startup";
   const eventUpdates = items.flatMap((item) => item.responses.filter((response) => response.conversationStatus === "awaiting_admin" || ((response.decision !== "undecided" || response.note) && !response.adminReviewedAt)).map((response) => ({ item, response })));
-  const potentialUpdates = potentialMeetings.filter((meeting) => meeting.decision !== "undecided" && !meeting.adminReviewedAt);
+  const potentialUpdates = potentialMeetings.filter((meeting) => (meeting.decision !== "undecided" || meeting.priorityRating) && !meeting.adminReviewedAt);
   const accepted = eventUpdates.filter(({ response }) => response.decision === "going").length + potentialUpdates.filter((meeting) => meeting.decision === "going").length;
   const declined = eventUpdates.filter(({ response }) => response.decision === "pass").length + potentialUpdates.filter((meeting) => meeting.decision === "pass").length;
   const messages = eventUpdates.filter(({ response }) => Boolean(response.note) && response.decision === "undecided").length;
   const availabilityUpdates = availability.filter((block) => !block.adminReviewedAt);
-  const matches = (decision: Decision, note?: string) => filter === "all" || (filter === "accepted" && decision === "going") || (filter === "declined" && decision === "pass") || (filter === "messages" && decision === "undecided" && Boolean(note));
+  const matches = (decision: Decision, note?: string, priorityRating?: number) => filter === "all" || (filter === "accepted" && decision === "going") || (filter === "declined" && decision === "pass") || (filter === "messages" && decision === "undecided" && Boolean(note)) || (filter === "rating" && Boolean(priorityRating));
   const visibleEvents = eventUpdates.filter(({ response }) => matches(response.decision, response.note));
-  const visiblePotential = potentialUpdates.filter((meeting) => matches(meeting.decision));
+  const visiblePotential = potentialUpdates.filter((meeting) => matches(meeting.decision, undefined, meeting.priorityRating));
   const visibleAvailability = filter === "all" || filter === "availability" ? availabilityUpdates : [];
   const reviewableCount = visiblePotential.length + visibleAvailability.length;
   const reviewVisible = () => {
@@ -4257,17 +4546,18 @@ function AdminInboxQueuePage({ items, potentialMeetings, availability, organisat
     { id: "accepted", label: "Accepted", count: accepted, className: "border-emerald-600 bg-emerald-600 text-white" },
     { id: "declined", label: "Declined", count: declined, className: "border-rose-600 bg-rose-600 text-white" },
     { id: "messages", label: "Messages", count: messages, className: "border-indigo-600 bg-indigo-600 text-white" },
+    { id: "rating", label: "Priority ratings", count: potentialUpdates.filter((meeting) => Boolean(meeting.priorityRating)).length, className: "border-amber-600 bg-amber-600 text-white" },
     { id: "availability", label: "Company availability", count: availabilityUpdates.length, className: "border-amber-600 bg-amber-600 text-white" },
   ];
-  const toneFor = (decision: Decision) => decision === "going" ? { card: "border-emerald-200 bg-emerald-50/70", badge: "bg-emerald-100 text-emerald-800", label: "Accepted" } : decision === "pass" ? { card: "border-rose-200 bg-rose-50/70", badge: "bg-rose-100 text-rose-800", label: "Declined" } : { card: "border-indigo-200 bg-indigo-50/70", badge: "bg-indigo-100 text-indigo-800", label: "Message" };
+  const toneFor = (decision: Decision, priorityRating?: number) => priorityRating ? { card: "border-amber-200 bg-amber-50/70", badge: "bg-amber-100 text-amber-800", label: "Priority rating" } : decision === "going" ? { card: "border-emerald-200 bg-emerald-50/70", badge: "bg-emerald-100 text-emerald-800", label: "Accepted" } : decision === "pass" ? { card: "border-rose-200 bg-rose-50/70", badge: "bg-rose-100 text-rose-800", label: "Declined" } : { card: "border-indigo-200 bg-indigo-50/70", badge: "bg-indigo-100 text-indigo-800", label: "Message" };
   return <div>
     <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">Admin workspace</p>
     <h1 className="mt-1 text-3xl font-semibold tracking-tight">Action inbox</h1>
-    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Use this queue for updates that need attention. Resolve routine accepts or declines without messaging; reply only when the startup has asked a question or needs a specific follow-up.</p>
+    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Use this queue for updates that need attention, including new Potential Biz Meet priority ratings. Resolve routine accepts or declines without messaging; reply only when the startup has asked a question or needs a specific follow-up.</p>
     <div className="mt-5 flex flex-wrap items-center gap-2">{filterOptions.map((option) => <button key={option.id} type="button" onClick={() => setFilter(option.id)} className={cn("rounded-full border px-3 py-1.5 text-xs font-bold", filter === option.id ? option.className : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50")}>{option.label} <span className="ml-1">{option.count}</span></button>)}{reviewableCount > 1 && <Button type="button" variant="secondary" className="ml-auto" onClick={reviewVisible}>Mark {reviewableCount} shown as reviewed</Button>}</div>
     <div className="mt-5 grid gap-5 lg:grid-cols-2">
       <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Schedule decisions & messages <Badge className="ml-2">{visibleEvents.length}</Badge></h2><p className="mt-1 text-xs leading-5 text-slate-500">Routine decisions can be acknowledged without messaging. Reply only when a response is needed.</p><div className="mt-4 max-h-[34rem] space-y-3 overflow-y-auto pr-1">{visibleEvents.map(({ item, response }) => { const tone = toneFor(response.decision); const plan = response.attendancePlan && response.attendancePlan !== "not_set" ? response.attendancePlan.replace("_", " ") : "attendance not specified"; const needsReply = response.conversationStatus === "awaiting_admin" || Boolean(response.note); return <article key={`${item.id}-${response.organisationId}`} className={cn("rounded-xl border p-3", tone.card)}><div className="flex items-start justify-between gap-3"><p className="text-sm text-slate-800"><strong>{organisationName(response.organisationId)}</strong> <strong>{item.title}</strong></p><span className={cn("shrink-0 rounded-full px-2 py-1 text-[10px] font-bold", tone.badge)}>{tone.label}</span></div><p className="mt-2 text-xs font-semibold capitalize text-slate-600">Plan: {plan}{response.attendanceStartsAt && ` · ${format(new Date(response.attendanceStartsAt), "d MMM, HH:mm")}`}{response.attendanceEndsAt && `–${format(new Date(response.attendanceEndsAt), "HH:mm")}`}</p>{response.messages?.slice(-2).map((message) => <p key={message.id} className="mt-2 rounded-lg bg-white/80 p-2 text-sm text-indigo-950"><strong>{message.authorRole === "lvnc_admin" ? "LVCN" : organisationName(response.organisationId)}:</strong> {message.body}</p>)}{!response.messages?.length && response.note && <p className="mt-2 rounded-lg bg-white/80 p-2 text-sm text-indigo-950">“{response.note}”</p>}<div className="mt-3 flex flex-wrap gap-2"><Button size="sm" type="button" variant="secondary" title="Marks this item reviewed without sending a reply" onClick={() => onResolveEvent(item, response)}>Acknowledge</Button><Button size="sm" type="button" variant="indigo" onClick={() => setReplying({ item, response })}>{needsReply ? "Reply & resolve" : "Reply (optional)"}</Button></div></article>; })}{!visibleEvents.length && <p className="py-6 text-center text-sm text-slate-500">No schedule updates match this view.</p>}</div></section>
-      <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Potential Biz Meets <Badge className="ml-2">{visiblePotential.length}</Badge></h2><div className="mt-4 max-h-[34rem] space-y-3 overflow-y-auto pr-1">{visiblePotential.map((meeting) => { const tone = toneFor(meeting.decision); return <article key={meeting.id} className={cn("rounded-xl border p-3", tone.card)}><div className="flex items-start justify-between gap-3"><p className="text-sm text-slate-800"><strong>{organisationName(meeting.organisationId)}</strong> <strong>{meeting.institutionName}</strong></p><span className={cn("shrink-0 rounded-full px-2 py-1 text-[10px] font-bold", tone.badge)}>{tone.label}</span></div><p className="mt-2 text-xs text-slate-600">{meeting.decision === "going" ? "Allocate a suitable free slot, then confirm the meeting." : "Review the decline and adjust the outreach plan if needed."}</p><div className="mt-3 flex gap-2"><Button size="sm" type="button" variant="secondary" onClick={onOpenPotential}>Open potential meet</Button><Button size="sm" type="button" variant="ghost" title="Marks this item reviewed without sending a reply" onClick={() => onReviewPotential(meeting)}>Acknowledge</Button></div></article>; })}{!visiblePotential.length && <p className="py-6 text-center text-sm text-slate-500">No Potential Biz Meet updates match this view.</p>}</div></section>
+       <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Potential Biz Meets <Badge className="ml-2">{visiblePotential.length}</Badge></h2><div className="mt-4 max-h-[34rem] space-y-3 overflow-y-auto pr-1">{visiblePotential.map((meeting) => { const tone = toneFor(meeting.decision, meeting.priorityRating); return <article key={meeting.id} className={cn("rounded-xl border p-3", tone.card)}><div className="flex items-start justify-between gap-3"><p className="text-sm text-slate-800"><strong>{organisationName(meeting.organisationId)}</strong> <strong>{meeting.institutionName}</strong></p><span className={cn("shrink-0 rounded-full px-2 py-1 text-[10px] font-bold", tone.badge)}>{tone.label}</span></div>{meeting.priorityRating ? <p className="mt-2 text-sm font-bold tracking-wide text-amber-600">{"★".repeat(meeting.priorityRating)} <span className="ml-1 text-xs font-medium text-amber-900">Startup priority</span></p> : <p className="mt-2 text-xs text-slate-600">{meeting.decision === "going" ? "Allocate a suitable free slot, then confirm the meeting." : "Review the decline and adjust the outreach plan if needed."}</p>}<div className="mt-3 flex gap-2"><Button size="sm" type="button" variant="secondary" onClick={onOpenPotential}>Open potential meet</Button><Button size="sm" type="button" variant="ghost" title="Marks this item reviewed without sending a reply" onClick={() => onReviewPotential(meeting)}>Acknowledge</Button></div></article>; })}{!visiblePotential.length && <p className="py-6 text-center text-sm text-slate-500">No Potential Biz Meet updates match this view.</p>}</div></section>
       <section className="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-2"><h2 className="font-semibold">Company availability <Badge className="ml-2">{visibleAvailability.length}</Badge></h2><div className="mt-4 max-h-[24rem] space-y-3 overflow-y-auto pr-1">{visibleAvailability.map((block) => <article key={block.id} className="rounded-xl border border-amber-200 bg-amber-50/70 p-3"><div className="flex items-start justify-between gap-3"><p className="text-sm text-slate-800"><strong>{organisationName(block.organisationId)}</strong> blocked <strong>{block.title}</strong>.</p><span className="shrink-0 rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">Availability</span></div><p className="mt-2 text-xs text-slate-700">{dateLabel({ startsAt: block.startsAt, endsAt: block.endsAt, timePrecision: "exact" } as ScheduleItem)}</p>{block.note && <p className="mt-2 rounded-lg bg-white/80 p-2 text-sm text-slate-800">“{block.note}”</p>}<Button size="sm" type="button" variant="secondary" className="mt-3" title="Marks this item reviewed without sending a reply" onClick={() => onReviewAvailability(block)}>Acknowledge</Button></article>)}{!visibleAvailability.length && <p className="py-6 text-center text-sm text-slate-500">No company-availability alerts match this view.</p>}</div></section>
     </div>
     {replying && <ScheduleReplyDialog item={replying.item} response={replying.response} organisationName={organisationName(replying.response.organisationId)} onClose={() => setReplying(undefined)} onSend={(body, status) => { onReplyEvent(replying.item, replying.response, body, status); setReplying(undefined); }} />}
@@ -4314,7 +4604,7 @@ function BusinessMeetingsPage({
   isPartnerObserver: boolean;
   onSave: (meeting: PotentialMeeting) => void;
   onDelete: (meeting: PotentialMeeting) => void;
-  onDecision: (meeting: PotentialMeeting, decision: Decision, priorityRating?: 1 | 2 | 3) => void;
+  onDecision: (meeting: PotentialMeeting, decision: Decision, priorityRating?: 1 | 2 | 3 | null) => void;
   onReview: (meeting: PotentialMeeting) => void;
   language: Language;
 }) {
@@ -4331,10 +4621,11 @@ function BusinessMeetingsPage({
   const [outreachFilter, setOutreachFilter] = useState<"all" | PotentialMeeting["status"]>("all");
   const [decisionFilter, setDecisionFilter] = useState<"all" | Decision>("all");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState<"institution" | "startup" | "status" | "decision">("institution");
+  const [sortBy, setSortBy] = useState<"institution" | "startup" | "status" | "decision" | "priority">("institution");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const organisationName = (id: string) => organisationNames[id] ?? organisations.find((organisation) => organisation.id === id)?.name ?? "Unknown startup";
   const companyOptions = Array.from(new Set(meetings.map((meeting) => meeting.organisationId))).map((id) => ({ id, name: organisationName(id) })).sort((a, b) => a.name.localeCompare(b.name));
+  const meetingCategories = Array.from(new Set(meetings.map((meeting) => meeting.category.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   const categoryOptions = Array.from(new Set(meetings.map((meeting) => meetingCategoryLabel(meeting.category)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   const visibleMeetings = meetings.filter((meeting) => {
     const displayCategory = meetingCategoryLabel(meeting.category);
@@ -4345,6 +4636,10 @@ function BusinessMeetingsPage({
       const rank = (decision: Decision) => decision === "going" ? 0 : decision === "pass" ? 1 : 2;
       return (rank(a.decision) - rank(b.decision)) * (sortDirection === "asc" ? 1 : -1);
     }
+    if (sortBy === "priority") {
+      const ratingDifference = (b.priorityRating ?? 0) - (a.priorityRating ?? 0);
+      return ratingDifference * (sortDirection === "asc" ? 1 : -1) || a.institutionName.localeCompare(b.institutionName);
+    }
     const values = sortBy === "institution" ? [a.institutionName, b.institutionName] : sortBy === "startup" ? [organisationName(a.organisationId), organisationName(b.organisationId)] : [a.status, b.status];
     return values[0].localeCompare(values[1]) * (sortDirection === "asc" ? 1 : -1);
   });
@@ -4352,9 +4647,8 @@ function BusinessMeetingsPage({
   const categoryStyle = (category: string) => { const value = meetingCategoryLabel(category).toLowerCase(); return value.includes("invest") ? "text-sky-700" : value.includes("corporate") ? "text-cyan-700" : value.includes("regulation") ? "text-amber-700" : value.includes("health") || value.includes("medical") ? "text-fuchsia-700" : value.includes("academic") || value.includes("research") ? "text-violet-700" : "text-emerald-700"; };
   function decisionLabel(decision: Decision) { return decision === "going" ? "Accepted" : decision === "pass" ? "Rejected" : "Pending"; }
   const blankMeeting = (): PotentialMeeting => ({ id: crypto.randomUUID(), organisationId: companyOptions[0]?.id ?? organisations[0]?.id ?? "", institutionName: "", category: "Other", status: "draft", decision: "undecided" });
-  const inbox = meetings.filter((meeting) => meeting.decision !== "undecided" && !meeting.adminReviewedAt);
-  const ratedMeetings = meetings.filter((meeting) => meeting.priorityRating).sort((a, b) => (b.priorityRating ?? 0) - (a.priorityRating ?? 0));
-  const visibilityControls = isAdmin ? <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"><span className="mr-1 text-xs font-bold text-slate-500">Visible columns</span>{[{ id: "institution", label: "Institution" }, { id: "startup", label: "Startup" }, { id: "category", label: "Category" }, { id: "time", label: "Proposed time" }, { id: "status", label: "LVCN status" }, { id: "decision", label: "Startup decision" }, { id: "priority", label: "Priority" }, { id: "why", label: "Why relevant" }, { id: "next", label: "Next step" }].map((column) => { const visible = !hiddenColumns.includes(column.id); return <button key={column.id} type="button" onClick={() => onColumnVisibilityChange(column.id, !visible)} className={cn("inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold", visible ? "bg-slate-100 text-slate-700" : "text-slate-400 line-through")} title={visible ? `Hide ${column.label}` : `Show ${column.label}`}>{visible ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}{column.label}</button>; })}</div> : null;
+  const inbox = meetings.filter((meeting) => (meeting.decision !== "undecided" || meeting.priorityRating) && !meeting.adminReviewedAt);
+  const visibilityControls = isAdmin ? <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"><span className="mr-1 text-xs font-bold text-slate-500">Visible columns</span>{[{ id: "institution", label: "Institution" }, { id: "startup", label: "Startup" }, { id: "category", label: "Category" }, { id: "time", label: "Proposed time" }, { id: "status", label: "LVCN status" }, { id: "priority", label: "Priority" }, { id: "why", label: "Why relevant" }, { id: "next", label: "Next step" }].map((column) => { const visible = !hiddenColumns.includes(column.id); return <button key={column.id} type="button" onClick={() => onColumnVisibilityChange(column.id, !visible)} className={cn("inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold", visible ? "bg-slate-100 text-slate-700" : "text-slate-400 line-through")} title={visible ? `Hide ${column.label}` : `Show ${column.label}`}>{visible ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}{column.label}</button>; })}</div> : null;
   useEffect(() => {
     const table = document.querySelector("table.min-w-\\[900px\\]");
     if (!table) return;
@@ -4389,16 +4683,49 @@ function BusinessMeetingsPage({
     const institutionColumnIndex = 1;
     table.querySelectorAll(`tr > :nth-child(${institutionColumnIndex})`).forEach((cell) => { (cell as HTMLElement).style.width = "12rem"; });
   }, [hiddenColumns, isAdmin, language, visibleMeetings]);
-  return <div>{visibilityControls}
-    <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">Schedule / Business relationships</p>
-    <div className="mt-1 flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-3xl font-semibold tracking-tight">{copy.businessMeetings}</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Startup-specific introductions and potential partnerships. Contact details and internal coordination notes are visible only to LVCN admins.</p></div>{isAdmin && <Button type="button" variant="indigo" onClick={() => setEditing(blankMeeting())}><Plus className="mr-1.5 size-4" />Add Potential Biz Meet</Button>}</div>
+  useEffect(() => {
+    if (!isAdmin) return;
+    const table = document.querySelector("table.min-w-\\[900px\\]");
+    if (!table) return;
+    table.querySelectorAll("[data-priority-column]").forEach((cell) => cell.remove());
+    const headerRow = table.querySelector("thead tr");
+    const decisionHeader = headerRow?.children[5] as HTMLElement | undefined;
+    if (decisionHeader) {
+      decisionHeader.style.display = "none";
+      if (!hiddenColumns.includes("priority")) {
+        const priorityHeader = document.createElement("th");
+        priorityHeader.dataset.priorityColumn = "true";
+        priorityHeader.className = "w-36 px-4 py-3";
+        priorityHeader.textContent = "Priority rating";
+        decisionHeader.insertAdjacentElement("afterend", priorityHeader);
+      }
+    }
+    const bodyRows = Array.from(table.querySelectorAll("tbody tr")).filter((row) => !row.querySelector("[colspan]"));
+    bodyRows.forEach((row, index) => {
+      const meeting = visibleMeetings[index];
+      const decisionCell = row.children[5] as HTMLElement | undefined;
+      if (!meeting || !decisionCell) return;
+      decisionCell.style.display = "none";
+      if (!hiddenColumns.includes("priority")) {
+        const priorityCell = document.createElement("td");
+        priorityCell.dataset.priorityColumn = "true";
+        priorityCell.className = "px-4 py-3 text-lg tracking-wide";
+        priorityCell.setAttribute("aria-label", meeting.priorityRating ? `${meeting.priorityRating} of 3 stars` : "Not rated");
+        priorityCell.textContent = `${"★".repeat(meeting.priorityRating ?? 0)}${"☆".repeat(3 - (meeting.priorityRating ?? 0))}`;
+        priorityCell.classList.add(meeting.priorityRating ? "text-amber-500" : "text-slate-300");
+        decisionCell.insertAdjacentElement("afterend", priorityCell);
+      }
+    });
+  }, [hiddenColumns, isAdmin, visibleMeetings]);
+  return <div>
+    <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">{language === "ko" ? "\uC77C\uC815 / \uBE44\uC988\uB2C8\uC2A4 \uAD00\uACC4" : "Schedule / Business relationships"}</p>
+    <div className="mt-1 flex flex-wrap items-end justify-between gap-3"><h1 className="text-3xl font-semibold tracking-tight">{copy.businessMeetings}</h1>{isAdmin && <Button type="button" variant="indigo" onClick={() => setEditing(blankMeeting())}><Plus className="mr-1.5 size-4" />Add Potential Biz Meet</Button>}</div>
     {isPartnerObserver && <section className="mt-5 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4"><FieldLabel>View Potential Biz Meets for</FieldLabel><Select className="mt-2 max-w-sm" value={selectedObserverOrganisation} onChange={(event) => setSelectedObserverOrganisation(event.target.value)}><option value="all">All startups</option>{companyOptions.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</Select><p className="mt-2 text-xs text-indigo-900">Read-only partner view. Choose a startup to focus its published opportunities.</p></section>}
     {isAdmin && <details open className="mt-5 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 text-sm text-indigo-950"><summary className="cursor-pointer font-semibold">Admin workflow</summary><p className="mt-2 leading-6">Create one row per startup, institution and contact. The startup-visible note is safe for the company to read; contact details and internal notes stay private.</p></details>}
-    {isAdmin && ratedMeetings.length > 0 && <section className="mt-5 overflow-hidden rounded-2xl border border-amber-200 bg-amber-50"><div className="p-4"><h2 className="font-semibold text-amber-950">Startup outreach priorities</h2><p className="mt-1 text-xs text-amber-900">Highest-rated institutions first. One star is low priority; three stars is high priority.</p></div><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-amber-100 text-xs font-bold text-amber-950"><tr><th className="px-4 py-2">Startup</th><th className="px-4 py-2">Institution</th><th className="px-4 py-2">Priority rating</th></tr></thead><tbody className="divide-y divide-amber-100 bg-white">{ratedMeetings.map((meeting) => <tr key={meeting.id}><td className="px-4 py-2 text-slate-700">{organisationName(meeting.organisationId)}</td><td className="px-4 py-2 font-semibold text-slate-900">{meeting.institutionName}</td><td className="px-4 py-2 font-bold tracking-wide text-amber-600">{"★".repeat(meeting.priorityRating!)}</td></tr>)}</tbody></table></div></section>}
-    {isAdmin && inbox.length > 0 && <section className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-amber-800">Admin action inbox</p><h2 className="mt-1 text-lg font-semibold text-amber-950">{inbox.length} startup {inbox.length === 1 ? "decision needs" : "decisions need"} your follow-up</h2></div><AlertTriangle className="size-6 text-amber-700" /></div><div className="mt-3 space-y-2">{inbox.map((meeting) => <div key={meeting.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-3 py-2"><p className="text-sm text-slate-700"><strong>{organisationName(meeting.organisationId)}</strong> {meeting.decision === "going" ? "accepted" : "declined"} <strong>{meeting.institutionName}</strong>. {meeting.decision === "going" ? "Allocate a suitable free slot, then confirm the meeting." : "Review the decline and adjust the outreach plan if needed."}</p><div className="flex gap-2"><Button size="sm" type="button" variant="secondary" onClick={() => setEditing(meeting)}>{meeting.decision === "going" ? "Allocate" : "Review"}</Button><Button size="sm" type="button" variant="ghost" onClick={() => onReview(meeting)}>Mark reviewed</Button></div></div>)}</div></section>}
+     {isAdmin && inbox.length > 0 && <section className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-amber-800">Admin action inbox</p><h2 className="mt-1 text-lg font-semibold text-amber-950">{inbox.length} startup {inbox.length === 1 ? "update needs" : "updates need"} your follow-up</h2></div><AlertTriangle className="size-6 text-amber-700" /></div><div className="mt-3 space-y-2">{inbox.map((meeting) => <div key={meeting.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-3 py-2"><p className="text-sm text-slate-700"><strong>{organisationName(meeting.organisationId)}</strong> {meeting.priorityRating ? <>rated <span className="font-bold tracking-wide text-amber-600">{"★".repeat(meeting.priorityRating)}</span> for</> : meeting.decision === "going" ? "accepted" : "declined"} <strong>{meeting.institutionName}</strong>. {meeting.priorityRating ? "Review the startup's priority and plan outreach." : meeting.decision === "going" ? "Allocate a suitable free slot, then confirm the meeting." : "Review the decline and adjust the outreach plan if needed."}</p><div className="flex gap-2"><Button size="sm" type="button" variant="secondary" onClick={() => setEditing(meeting)}>{meeting.priorityRating ? "Review rating" : meeting.decision === "going" ? "Allocate" : "Review"}</Button><Button size="sm" type="button" variant="ghost" onClick={() => onReview(meeting)}>Mark reviewed</Button></div></div>)}</div></section>}
     {isAdmin && meetings.some((meeting) => meeting.decision === "going" && !meeting.proposedStartsAt) && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950"><strong>Ready to schedule:</strong> {meetings.filter((meeting) => meeting.decision === "going" && !meeting.proposedStartsAt).map((meeting) => <button key={meeting.id} type="button" className="ml-2 font-bold text-emerald-800 underline" onClick={() => setAllocating(meeting)}>{meeting.institutionName} ({organisationName(meeting.organisationId)})</button>)}</div>}
     {isAdmin && <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-4"><div className="flex flex-wrap items-end gap-3"><div className="min-w-64 flex-1"><p className="text-xs font-bold uppercase tracking-[.12em] text-slate-500">Companies</p><div className="mt-2 flex max-h-28 flex-wrap gap-2 overflow-y-auto pr-1">{companyOptions.map((company) => <label key={company.id} className={cn("cursor-pointer rounded-full border px-3 py-1.5 text-xs font-semibold", selectedOrganisationIds.includes(company.id) ? "border-indigo-300 bg-indigo-50 text-indigo-800" : "border-slate-200 bg-white text-slate-600")}><input className="sr-only" type="checkbox" checked={selectedOrganisationIds.includes(company.id)} onChange={() => setSelectedOrganisationIds((current) => current.includes(company.id) ? current.filter((id) => id !== company.id) : [...current, company.id])} />{company.name}</label>)}</div><button type="button" className="mt-2 text-xs font-bold text-indigo-700 hover:underline" onClick={() => setSelectedOrganisationIds([])}>{selectedOrganisationIds.length ? "Show all companies" : "All companies selected"}</button></div><label className="min-w-40"><FieldLabel>LVCN outreach</FieldLabel><Select value={outreachFilter} onChange={(event) => setOutreachFilter(event.target.value as "all" | PotentialMeeting["status"])}><option value="all">All outreach states</option>{["draft", "contacted", "agreed", "rejected", "paused"].map((status) => <option key={status} value={status}>{pretty(status)}</option>)}</Select></label><label className="min-w-40"><FieldLabel>Startup response</FieldLabel><Select value={decisionFilter} onChange={(event) => setDecisionFilter(event.target.value as "all" | Decision)}><option value="all">All responses</option><option value="undecided">Pending</option><option value="going">Accepted</option><option value="pass">Rejected</option></Select></label></div><p className="mt-3 text-xs leading-5 text-slate-500"><strong>LVCN outreach</strong> is our relationship progress (draft, contacted, agreed). <strong>Startup response</strong> is the company’s choice (pending, accepted or rejected).</p></section>}
-    {isAdmin && <div className="mt-3 flex flex-wrap items-end gap-2"><label className="w-56"><FieldLabel>Sort rows by</FieldLabel><Select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="institution">Institution (A to Z)</option><option value="startup">Startup (A to Z)</option><option value="decision">Startup decision</option></Select></label>{sortBy === "decision" && <Button type="button" variant="secondary" onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")}>{sortDirection === "asc" ? "Accepted first" : "Pending first"}</Button>}</div>}
+    {isAdmin && <div className="mt-3 flex flex-wrap items-end gap-2"><label className="w-56"><FieldLabel>Sort rows by</FieldLabel><Select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="institution">Institution (A to Z)</option><option value="startup">Startup (A to Z)</option><option value="priority">Priority rating</option></Select></label>{sortBy === "priority" && <Button type="button" variant="secondary" onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")}>{sortDirection === "asc" ? "High rating first" : "Low rating first"}</Button>}</div>}
     {!isAdmin && <div className="mt-4 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white p-3"><label className="w-52"><FieldLabel>Order opportunities</FieldLabel><Select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}><option value="institution">Institution A–Z</option><option value="decision">Response status</option><option value="status">LVCN outreach status</option></Select></label>{sortBy === "decision" && <Button type="button" variant="secondary" onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")}>{sortDirection === "asc" ? "Confirmed first" : "Pending first"}</Button>}</div>}
     {canRespond && <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm leading-6 text-indigo-950"><strong>Next step:</strong> click an opportunity below, give the mentor or institution a 1–3 star priority rating, then choose <strong>Accept</strong> if you would like to speak with them or <strong>Reject</strong> if you do not. Your choices help LVCN prioritise outreach.</div>}
     <details className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 group">
@@ -4408,10 +4735,108 @@ function BusinessMeetingsPage({
       </summary>
       <div className="mt-4 flex flex-wrap items-center gap-2"><span className="text-xs font-bold uppercase tracking-[.12em] text-slate-500">{language === "ko" ? "카테고리" : "Filter by category"}</span><button type="button" onClick={() => setSelectedCategories([])} className={cn("rounded-full border px-3 py-1.5 text-xs font-bold", selectedCategories.length === 0 ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-600")}>{language === "ko" ? "전체" : "All"}</button>{categoryOptions.map((category) => <button key={category} type="button" onClick={() => setSelectedCategories((current) => current.includes(category) ? current.filter((value) => value !== category) : [...current, category])} className={cn("rounded-full border px-3 py-1.5 text-xs font-semibold", selectedCategories.includes(category) ? "border-indigo-300 bg-indigo-50 text-indigo-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50")}>{category}</button>)}</div><p className="mt-2 text-xs text-slate-500">{language === "ko" ? "여러 카테고리를 동시에 선택할 수 있습니다." : "Select one or several categories; choose All to clear the filter."}</p><div className="relative mt-3"><Search className="pointer-events-none absolute left-3 top-3 size-4 text-slate-400" /><Input value={query} onChange={(event) => setQuery(event.target.value)} className="pl-9" placeholder={isAdmin ? "Search institution, startup, contact or note" : "Search your potential meetings"} /></div>
     </details>
+    {isAdmin && <div className="relative mt-4"><Search className="pointer-events-none absolute left-3 top-3 size-4 text-slate-400" /><Input value={query} onChange={(event) => setQuery(event.target.value)} className="pl-9" placeholder="Search institution, startup, contact or note" /></div>}
+    {visibilityControls}
     <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.03)]"><div className="overflow-x-auto"><table className="min-w-[900px] w-full table-fixed text-left text-sm"><thead className="bg-[#286c58] text-[11px] font-bold text-white"><tr><th className="w-52 px-4 py-3">Institution</th>{isAdmin && <th className="w-40 px-4 py-3">Startup</th>}<th className="w-28 px-4 py-3">Category</th><th className="w-32 px-4 py-3">Proposed time</th><th className="w-28 px-4 py-3">LVCN status</th><th className="w-28 px-4 py-3">Startup decision</th><th className="px-4 py-3">Next step</th></tr></thead><tbody className="divide-y divide-slate-100">{visibleMeetings.map((meeting) => <tr key={meeting.id} onClick={() => isAdmin ? setEditing(meeting) : setDecisionMeeting(meeting)} className="cursor-pointer odd:bg-white even:bg-slate-50/70 hover:bg-indigo-50"><td className="px-4 py-3">{meeting.externalUrl ? <a onClick={(event) => event.stopPropagation()} href={meeting.externalUrl} target="_blank" rel="noreferrer" title={`Open ${meeting.institutionName} in a new tab`} className="inline-flex max-w-full items-center gap-1 font-semibold text-indigo-700 hover:underline"><span className="truncate">{meeting.institutionName}</span><ExternalLink className="size-3.5 shrink-0" /></a> : <p className="truncate font-semibold text-slate-900">{meeting.institutionName}</p>}<p className="mt-1 text-[11px] text-slate-400">{meeting.externalUrl ? "Open website" : "No website added"}</p></td>{isAdmin && <td className="truncate px-4 py-3 text-slate-600">{organisationName(meeting.organisationId)}</td>}<td className={cn("truncate px-4 py-3 font-semibold", categoryStyle(meeting.category))}>{meetingCategoryLabel(meeting.category)}</td><td className="px-4 py-3 text-xs text-slate-600">{meeting.proposedStartsAt ? <>{format(new Date(meeting.proposedStartsAt), "d MMM, HH:mm")}{meeting.proposedEndsAt && <> – {format(new Date(meeting.proposedEndsAt), "HH:mm")}</>}</> : "To arrange"}</td><td className="px-4 py-3"><span className={cn("rounded-md px-2 py-1 text-[10px] font-bold", statusStyle(meeting.status))}>{pretty(meeting.status)}</span></td><td className="px-4 py-3">{isAdmin ? <span className={cn("inline-block rounded-md px-2 py-1 text-xs font-bold", meeting.decision === "undecided" ? "urgent-attention" : "text-slate-700")}>{decisionLabel(meeting.decision)}</span> : <button type="button" onClick={(event) => { event.stopPropagation(); setDecisionMeeting(meeting); }} className={cn("rounded-md px-2.5 py-1 text-[10px] font-bold", meeting.decision === "going" ? "bg-emerald-100 text-emerald-800" : meeting.decision === "pass" ? "bg-rose-100 text-rose-800" : "urgent-attention")}>{decisionLabel(meeting.decision)}</button>}</td><td className="px-4 py-3 text-xs leading-5 text-slate-600"><span className="line-clamp-2">{meeting.nextAction ?? meeting.startupVisibleNote ?? "—"}</span></td></tr>)}</tbody></table></div>{!visibleMeetings.length && <p className="p-8 text-center text-sm text-slate-500">No potential business meetings are currently visible.</p>}</div>
-    {editing && <PotentialMeetingEditor meeting={editing} onClose={() => setEditing(undefined)} onSave={(meeting) => { onSave(meeting); setEditing(undefined); }} onDelete={(meeting) => { onDelete(meeting); setEditing(undefined); }} />}
+    {editing && <PotentialMeetingEditor meeting={editing} categories={meetingCategories} onClose={() => setEditing(undefined)} onSave={(meeting) => { onSave(meeting); setEditing(undefined); }} onDelete={(meeting) => { onDelete(meeting); setEditing(undefined); }} />}
     {allocating && <PotentialMeetingAllocation meeting={allocating} scheduleItems={scheduleItems} availability={availability} onClose={() => setAllocating(undefined)} onSave={(meeting) => { onSave(meeting); onReview(meeting); setAllocating(undefined); }} />}
     {decisionMeeting && <Dialog open onOpenChange={(open) => !open && setDecisionMeeting(undefined)}><DialogContent><DialogTitle>{decisionMeeting.institutionName}</DialogTitle><DialogDescription>Review the opportunity, then choose the response that is right for your startup.</DialogDescription><div className="mt-5 space-y-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-700">{decisionMeeting.proposedStartsAt && <p><strong>Proposed time:</strong> {format(new Date(decisionMeeting.proposedStartsAt), "EEE d MMM, HH:mm")}{decisionMeeting.proposedEndsAt && <> – {format(new Date(decisionMeeting.proposedEndsAt), "HH:mm")}</>}</p>}{decisionMeeting.location && <p><strong>Location:</strong> {decisionMeeting.location}</p>}{decisionMeeting.startupVisibleNote && <p><strong>Why this is relevant:</strong> {decisionMeeting.startupVisibleNote}</p>}{decisionMeeting.nextAction && <p><strong>Next step:</strong> {decisionMeeting.nextAction}</p>}{decisionMeeting.externalUrl && <a className="inline-flex font-semibold text-indigo-700 hover:underline" href={decisionMeeting.externalUrl} target="_blank" rel="noreferrer">Open institution website <ExternalLink className="ml-1 mt-0.5 size-3.5" /></a>}</div><div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-sm font-bold text-amber-950">How important is this institution?</p><p className="mt-1 text-xs text-amber-900">Your rating helps LVCN prioritise outreach: 1 = low, 3 = high.</p><div className="mt-3 flex gap-2">{([1, 2, 3] as const).map((rating) => <button key={rating} type="button" onClick={() => setPriorityRating(rating)} aria-label={`${rating} star priority`} className={cn("rounded-lg border px-3 py-2 text-lg", priorityRating === rating ? "border-amber-500 bg-amber-100 text-amber-600" : "border-amber-200 bg-white text-slate-300")}>{"★".repeat(rating)}</button>)}</div></div><div className="mt-5 flex flex-wrap gap-2"><Button type="button" variant="indigo" onClick={() => { onDecision(decisionMeeting, "going", priorityRating); setDecisionMeeting(undefined); }}>Accept</Button><Button type="button" variant="outline" onClick={() => { onDecision(decisionMeeting, "undecided", priorityRating); setDecisionMeeting(undefined); }}>Keep pending</Button><Button type="button" variant="outline" onClick={() => { onDecision(decisionMeeting, "pass", priorityRating); setDecisionMeeting(undefined); }}>Reject</Button></div></DialogContent></Dialog>}
+  </div>;
+}
+
+function BusinessMeetingsPageV2(props: Parameters<typeof BusinessMeetingsPage>[0]) {
+  const { meetings, hiddenColumns, onDecision, language } = props;
+  const copy = language === "ko" ? koreanUiText : uiText.en;
+  const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"institution" | "priority">("priority");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [decisionMeeting, setDecisionMeeting] = useState<PotentialMeeting>();
+  const [rating, setRating] = useState<1 | 2 | 3>();
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  useEffect(() => {
+    if (props.isAdmin || props.isPartnerObserver) return;
+    const table = document.querySelector("table.min-w-\\[760px\\]");
+    if (!table) return;
+    Array.from(table.querySelectorAll("tbody tr")).filter((row) => !row.querySelector("[colspan]")).forEach((row, index) => {
+      const meeting = meetings.filter((item) => item.institutionName.toLowerCase().includes(query.trim().toLowerCase()) && (categoryFilter === "all" || meetingCategoryLabel(item.category) === categoryFilter)).sort((a, b) => {
+        if (sortBy === "institution") return a.institutionName.localeCompare(b.institutionName);
+        return ((b.priorityRating ?? 0) - (a.priorityRating ?? 0)) * (sortDirection === "asc" ? 1 : -1) || a.institutionName.localeCompare(b.institutionName);
+      })[index];
+      const cell = row.children[0] as HTMLElement | undefined;
+      if (!meeting || !cell || !meeting.externalUrl || cell.querySelector("[data-institution-link]")) return;
+      const textNode = Array.from(cell.childNodes).find((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim());
+      if (!textNode) return;
+      const link = document.createElement("a");
+      link.dataset.institutionLink = "true";
+      link.href = meeting.externalUrl;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      link.title = `Open ${meeting.institutionName} in a new tab`;
+      link.className = "text-indigo-700 hover:underline";
+      link.textContent = meeting.institutionName;
+      link.addEventListener("click", (event) => event.stopPropagation());
+      cell.replaceChild(link, textNode);
+    });
+  }, [categoryFilter, meetings, props.isAdmin, props.isPartnerObserver, query, sortBy, sortDirection]);
+  useEffect(() => {
+    if (!decisionMeeting) return;
+    const dialog = document.querySelector('[role="dialog"]');
+    const description = dialog?.querySelector("p");
+    if (!dialog || !description || description.nextElementSibling?.getAttribute("data-startup-details") === "true") return;
+    const details = document.createElement("div");
+    details.dataset.startupDetails = "true";
+    details.className = "mt-5 space-y-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-700";
+    const rows = [
+      `Category: ${meetingCategoryLabel(decisionMeeting.category)}`,
+      `LVCN status: ${pretty(decisionMeeting.status)}`,
+      decisionMeeting.proposedStartsAt && `Proposed time: ${format(new Date(decisionMeeting.proposedStartsAt), "EEE d MMM, HH:mm")}${decisionMeeting.proposedEndsAt ? ` – ${format(new Date(decisionMeeting.proposedEndsAt), "HH:mm")}` : ""}`,
+      decisionMeeting.location && `Location: ${decisionMeeting.location}`,
+      decisionMeeting.startupVisibleNote && `Why this is relevant: ${decisionMeeting.startupVisibleNote}`,
+      decisionMeeting.nextAction && `Next step: ${decisionMeeting.nextAction}`,
+    ].filter(Boolean) as string[];
+    rows.forEach((row) => { const paragraph = document.createElement("p"); paragraph.textContent = row; details.appendChild(paragraph); });
+    if (decisionMeeting.externalUrl) { const link = document.createElement("a"); link.href = decisionMeeting.externalUrl; link.target = "_blank"; link.rel = "noreferrer"; link.className = "inline-flex font-semibold text-indigo-700 hover:underline"; link.textContent = "Open institution website"; details.appendChild(link); }
+    description.textContent = "Review the institution details, then choose and save a priority rating.";
+    description.insertAdjacentElement("afterend", details);
+    const ratingLabel = Array.from(dialog.querySelectorAll("p")).find((element) => element.textContent?.trim() === "Priority rating");
+    const ratingPanel = ratingLabel?.parentElement;
+    if (ratingPanel) {
+      if (decisionMeeting.priorityRating) {
+        const reset = document.createElement("button");
+        reset.type = "button";
+        reset.className = "mt-2 block text-xs font-semibold text-slate-600 underline hover:text-slate-900";
+        reset.textContent = "Reset rating";
+        reset.addEventListener("click", () => { onDecision(decisionMeeting, decisionMeeting.decision, null); setDecisionMeeting(undefined); });
+        ratingPanel.appendChild(reset);
+      } else {
+        ratingPanel.classList.add("startup-rating-nudge");
+        const prompt = document.createElement("p");
+        prompt.className = "mt-2 text-xs font-semibold text-amber-900";
+        prompt.setAttribute("aria-live", "polite");
+        prompt.textContent = "Please choose a priority rating before closing.";
+        ratingPanel.appendChild(prompt);
+      }
+    }
+  }, [decisionMeeting, onDecision]);
+  if (props.isAdmin || props.isPartnerObserver) return <BusinessMeetingsPage {...props} />;
+  const categoryOptions = Array.from(new Set(meetings.map((meeting) => meetingCategoryLabel(meeting.category)))).sort((a, b) => a.localeCompare(b));
+  const visible = meetings.filter((meeting) => meeting.institutionName.toLowerCase().includes(query.trim().toLowerCase()) && (categoryFilter === "all" || meetingCategoryLabel(meeting.category) === categoryFilter)).sort((a, b) => {
+    if (sortBy === "institution") return a.institutionName.localeCompare(b.institutionName);
+    const difference = (b.priorityRating ?? 0) - (a.priorityRating ?? 0);
+    return (difference || a.institutionName.localeCompare(b.institutionName)) * (sortDirection === "asc" ? -1 : 1);
+  });
+  const showColumn = (columnId: string) => !hiddenColumns.includes(columnId);
+  const chooseMeeting = (meeting: PotentialMeeting) => {
+    setDecisionMeeting(meeting);
+    setRating(meeting.priorityRating);
+  };
+  const saveRating = (meeting: PotentialMeeting, nextRating: 1 | 2 | 3 | null) => onDecision(meeting, meeting.decision, nextRating);
+  return <div>
+    <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">Schedule / Business relationships</p>
+    <div className="mt-1 flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-3xl font-semibold tracking-tight">{copy.businessMeetings}</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">{language === "ko" ? "\uB9CC\uB098\uACE0 \uC2F6\uC740 \uAE30\uAD00\uC5D0 \uC6B0\uC120\uC21C\uC704\uB97C \uB9E4\uACA8 \uC8FC\uC138\uC694. \uBCC4 3\uAC1C\uAC00 \uAC00\uC7A5 \uB192\uC740 \uC6B0\uC120\uC21C\uC704\uC785\uB2C8\uB2E4." : "Rate the institutions you most want to meet. Three stars means highest priority."}</p></div></div>
+    <div className="mt-5 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-3"><label className="min-w-64 flex-1"><span className="block text-xs font-bold uppercase tracking-wide text-slate-500">{language === "ko" ? "\uAC80\uC0C9" : "Search"}</span><Input className="mt-1" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={language === "ko" ? "\uAE30\uAD00 \uAC80\uC0C9" : "Search institutions"} /></label><label className="w-56"><span className="block text-xs font-bold uppercase tracking-wide text-slate-500">{language === "ko" ? "\uCE74\uD14C\uACE0\uB9AC \uD544\uD130" : "Filter by category"}</span><Select className="mt-1" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="all">{language === "ko" ? "\uBAA8\uB4E0 \uCE74\uD14C\uACE0\uB9AC" : "All categories"}</option>{categoryOptions.map((category) => <option key={category} value={category}>{potentialMeetingCategoryDisplay(category, language)}</option>)}</Select></label><label className="w-56"><span className="block text-xs font-bold uppercase tracking-wide text-slate-500">{language === "ko" ? "\uC815\uB82C" : "Order opportunities"}</span><Select className="mt-1" value={sortBy === "institution" ? "institution" : sortDirection} onChange={(event) => { const value = event.target.value; if (value === "institution") setSortBy("institution"); else { setSortBy("priority"); setSortDirection(value as "asc" | "desc"); } }}><option value="institution">{language === "ko" ? "\uAE30\uAD00\uBA85 \uC21C" : "Institution A-Z"}</option><option value="desc">{language === "ko" ? "\uB192\uC740 \uC6B0\uC120\uC21C\uC704 \uC21C" : "Highest rating first"}</option><option value="asc">{language === "ko" ? "\uB0AE\uC740 \uC6B0\uC120\uC21C\uC704 \uC21C" : "Lowest rating first"}</option></Select></label></div>
+     <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,.03)]"><div className="overflow-x-auto"><table className="min-w-[760px] w-full text-left text-sm"><thead className="bg-[#286c58] text-[11px] font-bold text-white"><tr>{showColumn("institution") && <th className="w-56 px-4 py-3">{language === "ko" ? "\uAE30\uAD00" : "Institution"}</th>}{showColumn("category") && <th className="w-32 px-4 py-3">{language === "ko" ? "\uCE74\uD14C\uACE0\uB9AC" : "Category"}</th>}{showColumn("time") && <th className="w-36 px-4 py-3">{language === "ko" ? "\uC81C\uC548 \uC2DC\uAC04" : "Proposed time"}</th>}{showColumn("status") && <th className="w-28 px-4 py-3">{language === "ko" ? "LVCN \uC0C1\uD0DC" : "LVCN status"}</th>}{showColumn("priority") && <th className="w-36 px-4 py-3">{language === "ko" ? "\uC6B0\uC120\uC21C\uC704 \uD3C9\uAC00" : "Priority rating"}</th>}{showColumn("why") && <th className="w-64 px-4 py-3">{language === "ko" ? "\uAD00\uB828\uC131" : "Why relevant"}</th>}{showColumn("next") && <th className="px-4 py-3">{language === "ko" ? "\uB2E4\uC74C \uB2E8\uACC4" : "Next step"}</th>}</tr></thead><tbody className="divide-y divide-slate-100">{visible.map((meeting) => <tr key={meeting.id} onClick={() => chooseMeeting(meeting)} className="cursor-pointer odd:bg-white even:bg-slate-50/70 hover:bg-indigo-50">{showColumn("institution") && <td className="px-4 py-3 font-semibold text-slate-900">{meeting.institutionName}<p className="mt-1 text-[11px] font-normal text-slate-400">{language === "ko" ? "\uBCC4\uC744 \uB20C\uB7EC \uC6B0\uC120\uC21C\uC704\uB97C \uC800\uC7A5\uD558\uC138\uC694" : "Click a star to save your priority"}</p></td>}{showColumn("category") && <td className="px-4 py-3 font-semibold text-emerald-700">{potentialMeetingCategoryDisplay(meeting.category, language)}</td>}{showColumn("time") && <td className="px-4 py-3 text-xs text-slate-600">{meeting.proposedStartsAt ? format(new Date(meeting.proposedStartsAt), "d MMM, HH:mm") : language === "ko" ? "\uC870\uC728 \uD544\uC694" : "To arrange"}</td>}{showColumn("status") && <td className="px-4 py-3"><span className={cn("rounded-md px-2 py-1 text-[10px] font-bold", meeting.status === "agreed" ? "bg-emerald-100 text-emerald-800" : meeting.status === "rejected" ? "bg-rose-100 text-rose-800" : "bg-indigo-100 text-indigo-800")}>{potentialMeetingStatusDisplay(meeting.status, language)}</span></td>}{showColumn("priority") && <td className="px-4 py-3"><div className="flex gap-1" role="group" aria-label={language === "ko" ? `${meeting.institutionName} \uC6B0\uC120\uC21C\uC704 \uD3C9\uAC00` : `Priority rating for ${meeting.institutionName}`}>{([1, 2, 3] as const).map((star) => <button key={star} type="button" onClick={(event) => { event.stopPropagation(); saveRating(meeting, star); }} aria-label={language === "ko" ? `${star}\uC810` : `${star} star${star === 1 ? "" : "s"}`} className={cn("rounded-md px-1 text-2xl leading-7 transition-colors", (meeting.priorityRating ?? 0) >= star ? "text-amber-500" : "text-slate-300 hover:text-amber-300")}>★</button>)}</div>{meeting.priorityRating ? <button type="button" className="mt-1 block text-[11px] font-semibold text-slate-500 underline hover:text-slate-700" onClick={(event) => { event.stopPropagation(); saveRating(meeting, null); }}>{language === "ko" ? "\uD3C9\uAC00 \uCD08\uAE30\uD654" : "Reset rating"}</button> : <span className="text-[11px] text-slate-500">{language === "ko" ? "\uC544\uC9C1 \uD3C9\uAC00\uD558\uC9C0 \uC54A\uC74C" : "Not rated yet"}</span>}</td>}{showColumn("why") && <td className="px-4 py-3 text-xs leading-5 text-slate-600">{(language === "ko" ? potentialMeetingKoreanRelevance(meeting) : potentialMeetingRelevance(meeting, language)) || (language === "ko" ? "\uC544\uC9C1 \uC791\uC131\uB418\uC9C0 \uC54A\uC74C" : "Not yet written")}</td>}{showColumn("next") && <td className="px-4 py-3 text-xs leading-5 text-slate-600">{potentialMeetingNextAction(meeting.nextAction, language) ?? "—"}</td>}</tr>)}</tbody></table></div>{!visible.length && <p className="p-8 text-center text-sm text-slate-500">{language === "ko" ? "\uD604\uC7AC \uD45C\uC2DC\uD560 \uBE44\uC988\uB2C8\uC2A4 \uBBF8\uD305\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." : "No potential business meetings are currently visible."}</p>}</div>
+    {decisionMeeting && <Dialog open onOpenChange={(open) => !open && setDecisionMeeting(undefined)}><DialogContent><DialogTitle>{decisionMeeting.institutionName}</DialogTitle><DialogDescription>Review the institution details, choose a 1–3 star priority rating, then save it. Your startup decision is managed separately.</DialogDescription><div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-sm font-bold text-amber-950">Priority rating</p><div className="mt-2 flex gap-1">{([1, 2, 3] as const).map((star) => <button key={star} type="button" onClick={() => setRating(star)} aria-label={`${star} star${star === 1 ? "" : "s"}`} className={cn("px-1 text-3xl", (rating ?? 0) >= star ? "text-amber-500" : "text-slate-300")}>★</button>)}</div></div><div className="mt-5 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setDecisionMeeting(undefined)}>Cancel</Button><Button type="button" variant="indigo" disabled={!rating} onClick={() => { onDecision(decisionMeeting, decisionMeeting.decision, rating); setDecisionMeeting(undefined); }}>Save rating</Button></div></DialogContent></Dialog>}
   </div>;
 }
 
@@ -4419,11 +4844,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <label><FieldLabel>{label}</FieldLabel>{children}</label>;
 }
 
-function PotentialMeetingEditor({ meeting, onClose, onSave, onDelete }: { meeting: PotentialMeeting; onClose: () => void; onSave: (meeting: PotentialMeeting) => void; onDelete: (meeting: PotentialMeeting) => void; }) {
+function PotentialMeetingEditor({ meeting, categories, onClose, onSave, onDelete }: { meeting: PotentialMeeting; categories: string[]; onClose: () => void; onSave: (meeting: PotentialMeeting) => void; onDelete: (meeting: PotentialMeeting) => void; }) {
   const [draft, setDraft] = useState(meeting);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const customCategoryValue = "__create_category__";
+  const hasExistingCategory = categories.includes(draft.category);
+  const [categoryChoice, setCategoryChoice] = useState(hasExistingCategory ? draft.category : customCategoryValue);
   const set = <K extends keyof PotentialMeeting>(key: K, value: PotentialMeeting[K]) => setDraft((current) => ({ ...current, [key]: value }));
-  return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent className="max-w-2xl"><DialogTitle>{meeting.institutionName ? "Edit Potential Biz Meet" : "Add Potential Biz Meet"}</DialogTitle><DialogDescription>Start with the essentials. Contact details and internal notes remain visible to LVCN only.</DialogDescription><form className="mt-5 space-y-5" onSubmit={(event) => { event.preventDefault(); if (draft.institutionName.trim() && draft.organisationId) onSave({ ...draft, institutionName: draft.institutionName.trim() }); }}><section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"><p className="text-xs font-bold uppercase tracking-[.12em] text-slate-500">1. Opportunity</p><div className="mt-3 grid gap-4 sm:grid-cols-2"><Field label="Startup *"><Select value={draft.organisationId} onChange={(event) => set("organisationId", event.target.value)}>{organisations.map((organisation) => <option key={organisation.id} value={organisation.id}>{organisation.name}</option>)}</Select></Field><Field label="Institution *"><Input required value={draft.institutionName} placeholder="e.g. Octopus Ventures" onChange={(event) => set("institutionName", event.target.value)} /></Field><Field label="Category"><Input value={draft.category} placeholder="Investor, university, NHS..." onChange={(event) => set("category", event.target.value)} /></Field><Field label="Outreach status"><Select value={draft.status} onChange={(event) => set("status", event.target.value as PotentialMeeting["status"])}>{["draft", "contacted", "agreed", "rejected", "paused"].map((status) => <option key={status} value={status}>{pretty(status)}</option>)}</Select></Field></div></section><section className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4"><p className="text-xs font-bold uppercase tracking-[.12em] text-indigo-700">2. What the startup sees</p><div className="mt-3 grid gap-4 sm:grid-cols-2"><Field label="Website"><Input type="url" value={draft.externalUrl ?? ""} placeholder="https://" onChange={(event) => set("externalUrl", event.target.value)} /></Field><Field label="Location"><Input value={draft.location ?? ""} placeholder="London, online, or TBC" onChange={(event) => set("location", event.target.value)} /></Field><label className="sm:col-span-2 text-sm font-semibold text-slate-700">Why this is relevant<textarea value={draft.startupVisibleNote ?? ""} onChange={(event) => set("startupVisibleNote", event.target.value)} placeholder="A short, clear explanation for the startup." className="mt-1 min-h-20 w-full rounded-lg border border-slate-200 bg-white p-3 text-sm" /></label><label className="sm:col-span-2 text-sm font-semibold text-slate-700">Next action<textarea value={draft.nextAction ?? ""} onChange={(event) => set("nextAction", event.target.value)} placeholder="What should happen next?" className="mt-1 min-h-16 w-full rounded-lg border border-slate-200 bg-white p-3 text-sm" /></label></div></section><details className="rounded-2xl border border-slate-200 bg-white p-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Private LVCN coordination (optional)</summary><div className="mt-4 grid gap-4 sm:grid-cols-2"><Field label="Contact name"><Input value={draft.contactName ?? ""} onChange={(event) => set("contactName", event.target.value)} /></Field><Field label="Contact email"><Input type="email" value={draft.contactEmail ?? ""} onChange={(event) => set("contactEmail", event.target.value)} /></Field><label className="sm:col-span-2 text-sm font-semibold text-slate-700">Internal note<textarea value={draft.internalNote ?? ""} onChange={(event) => set("internalNote", event.target.value)} className="mt-1 min-h-20 w-full rounded-lg border border-slate-200 p-3 text-sm" /></label></div></details><div className="flex flex-wrap items-center justify-between gap-2"><div>{meeting.institutionName && <>{confirmDelete ? <div className="flex items-center gap-2"><Button type="button" variant="destructive" onClick={() => onDelete(meeting)}>Confirm delete</Button><button type="button" className="text-xs font-semibold text-slate-500 underline" onClick={() => setConfirmDelete(false)}>Keep</button></div> : <Button type="button" variant="destructive" onClick={() => setConfirmDelete(true)}>Delete</Button>}</>}</div><div className="flex gap-2"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" variant="indigo">Save opportunity</Button></div></div></form></DialogContent></Dialog>;
+  return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent className="max-w-2xl"><DialogTitle>{meeting.institutionName ? "Edit Potential Biz Meet" : "Add Potential Biz Meet"}</DialogTitle><DialogDescription>Start with the essentials. Contact details and internal notes remain visible to LVCN only.</DialogDescription><form className="mt-5 space-y-5" onSubmit={(event) => { event.preventDefault(); if (draft.institutionName.trim() && draft.organisationId && draft.category.trim()) onSave({ ...draft, institutionName: draft.institutionName.trim(), category: draft.category.trim() }); }}><section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"><p className="text-xs font-bold uppercase tracking-[.12em] text-slate-500">1. Opportunity</p><div className="mt-3 grid gap-4 sm:grid-cols-2"><Field label="Startup *"><Select value={draft.organisationId} onChange={(event) => set("organisationId", event.target.value)}>{organisations.map((organisation) => <option key={organisation.id} value={organisation.id}>{organisation.name}</option>)}</Select></Field><Field label="Institution *"><Input required value={draft.institutionName} placeholder="e.g. Octopus Ventures" onChange={(event) => set("institutionName", event.target.value)} /></Field><div><FieldLabel>Category</FieldLabel><Select value={categoryChoice} onChange={(event) => { const value = event.target.value; setCategoryChoice(value); if (value !== customCategoryValue) set("category", value); }}><option value="">Choose an existing category</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}<option value={customCategoryValue}>Create a new category…</option></Select>{categoryChoice === customCategoryValue && <><Input required className="mt-2" value={draft.category} placeholder="New category name" onChange={(event) => set("category", event.target.value)} /><p className="mt-1 text-xs text-slate-500">Use an existing category where possible to keep reporting consistent.</p></>}</div><Field label="Outreach status"><Select value={draft.status} onChange={(event) => set("status", event.target.value as PotentialMeeting["status"])}>{["draft", "contacted", "agreed", "rejected", "paused"].map((status) => <option key={status} value={status}>{pretty(status)}</option>)}</Select></Field></div></section><details className="rounded-2xl border border-slate-200 bg-white p-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Private LVCN coordination (optional)</summary><div className="mt-4 grid gap-4 sm:grid-cols-2"><Field label="Contact name"><Input value={draft.contactName ?? ""} onChange={(event) => set("contactName", event.target.value)} /></Field><Field label="Contact email"><Input type="email" value={draft.contactEmail ?? ""} onChange={(event) => set("contactEmail", event.target.value)} /></Field><label className="sm:col-span-2 text-sm font-semibold text-slate-700">Internal note<textarea value={draft.internalNote ?? ""} onChange={(event) => set("internalNote", event.target.value)} className="mt-1 min-h-20 w-full rounded-lg border border-slate-200 p-3 text-sm" /></label></div></details><section className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4"><p className="text-xs font-bold uppercase tracking-[.12em] text-indigo-700">2. What the startup sees</p><div className="mt-3 grid gap-4 sm:grid-cols-2"><Field label="Website"><Input type="url" value={draft.externalUrl ?? ""} placeholder="https://" onChange={(event) => set("externalUrl", event.target.value)} /></Field><Field label="Location"><Input value={draft.location ?? ""} placeholder="London, online, or TBC" onChange={(event) => set("location", event.target.value)} /></Field><label className="sm:col-span-2 text-sm font-semibold text-slate-700">Why this is relevant<textarea value={draft.startupVisibleNote ?? ""} onChange={(event) => set("startupVisibleNote", event.target.value)} placeholder="A short, clear explanation for the startup." className="mt-1 min-h-20 w-full rounded-lg border border-slate-200 bg-white p-3 text-sm" /></label><label className="sm:col-span-2 text-sm font-semibold text-slate-700">Next action<textarea value={draft.nextAction ?? ""} onChange={(event) => set("nextAction", event.target.value)} placeholder="What should happen next?" className="mt-1 min-h-16 w-full rounded-lg border border-slate-200 bg-white p-3 text-sm" /></label></div></section><div className="flex flex-wrap items-center justify-between gap-2"><div>{meeting.institutionName && <>{confirmDelete ? <div className="flex items-center gap-2"><Button type="button" variant="destructive" onClick={() => onDelete(meeting)}>Confirm delete</Button><button type="button" className="text-xs font-semibold text-slate-500 underline" onClick={() => setConfirmDelete(false)}>Keep</button></div> : <Button type="button" variant="destructive" onClick={() => setConfirmDelete(true)}>Delete</Button>}</>}</div><div className="flex gap-2"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" variant="indigo">Save opportunity</Button></div></div></form></DialogContent></Dialog>;
 }
 
 function PotentialMeetingAllocation({ meeting, scheduleItems, availability, onClose, onSave }: { meeting: PotentialMeeting; scheduleItems: ScheduleItem[]; availability: AvailabilityBlock[]; onClose: () => void; onSave: (meeting: PotentialMeeting) => void; }) {
@@ -4901,18 +5329,22 @@ function AdminDecisionsDashboard({
   items,
   potentialMeetings,
   engagementEvents,
+  engagementBaselineAt,
   engagementIdentities,
   engagementInvites,
   organisationNames,
   onOpenSchedule,
+  onResetEngagement,
 }: {
   items: ScheduleItem[];
   potentialMeetings: PotentialMeeting[];
   engagementEvents: EngagementAccessEvent[];
+  engagementBaselineAt?: string;
   engagementIdentities: EngagementIdentity[];
   engagementInvites: EngagementInvite[];
   organisationNames: Record<string, string>;
   onOpenSchedule: () => void;
+  onResetEngagement: () => void;
 }) {
   const actionable = items.filter(
     (item) =>
@@ -4928,18 +5360,35 @@ function AdminDecisionsDashboard({
     accepted: decisions.filter((decision) => ["going", "acknowledged"].includes(decision)).length,
     rejected: decisions.filter((decision) => decision === "pass").length,
   });
-  const startupRows = organisations.map((organisation) => {
+  const ratingBreakdown = (meetings: PotentialMeeting[]) => ({
+    unrated: meetings.filter((meeting) => !meeting.priorityRating).length,
+    one: meetings.filter((meeting) => meeting.priorityRating === 1).length,
+    two: meetings.filter((meeting) => meeting.priorityRating === 2).length,
+    three: meetings.filter((meeting) => meeting.priorityRating === 3).length,
+  });
+  const organisationIds = new Set([
+    ...Object.keys(organisationNames),
+    ...organisations.map((organisation) => organisation.id),
+    ...actionable.flatMap((item) => [...item.organisationIds, ...item.responses.map((response) => response.organisationId)]),
+    ...potentialMeetings.map((meeting) => meeting.organisationId),
+  ]);
+  const startupRows = [...organisationIds].map((id) => ({ id, name: organisationNames[id] ?? organisations.find((organisation) => organisation.id === id)?.name ?? "Unknown startup" })).map((organisation) => {
     const assigned = actionable.filter((item) => appliesTo(item, organisation.id));
-    const decisions = assigned.map((item) => decisionFor(item, organisation.id));
+    // A current response is direct evidence of a startup action. Include it
+    // even if a historical targeting join was removed or changed afterwards.
+    const responded = actionable.filter((item) => item.responses.some((response) => response.organisationId === organisation.id));
+    const counted = [...new Map([...assigned, ...responded].map((item) => [item.id, item])).values()];
+    const decisions = counted.map((item) => decisionFor(item, organisation.id));
     const potential = potentialMeetings.filter((meeting) => meeting.organisationId === organisation.id);
     return {
-      organisation,
+      organisation: { id: organisation.id, name: organisation.name },
       schedule: breakdown(decisions),
-      potential: breakdown(potential.map((meeting) => meeting.decision)),
-      pending: breakdown(decisions).pending + breakdown(potential.map((meeting) => meeting.decision)).pending,
-      confirmed: breakdown(decisions).accepted + breakdown(potential.map((meeting) => meeting.decision)).accepted,
-      rejected: breakdown(decisions).rejected + breakdown(potential.map((meeting) => meeting.decision)).rejected,
-      total: assigned.length,
+      potential: ratingBreakdown(potential),
+      // Only opportunities currently assigned to a startup can be awaiting it.
+      pending: breakdown(assigned.map((item) => decisionFor(item, organisation.id))).pending,
+      confirmed: breakdown(decisions).accepted,
+      rejected: breakdown(decisions).rejected,
+      total: counted.length,
     };
   });
   const totals = startupRows.reduce(
@@ -4980,14 +5429,14 @@ function AdminDecisionsDashboard({
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-[980px] w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[.1em] text-slate-500">
-              <tr><th className="px-3 py-2">Startup</th><th className="px-3 py-2 text-right">Schedule rows<br /><span className="font-medium normal-case tracking-normal">pending · accepted · rejected</span></th><th className="px-3 py-2 text-right">Potential Biz Meets<br /><span className="font-medium normal-case tracking-normal">pending · accepted · rejected</span></th><th className="px-3 py-2 text-right">All pending</th><th className="px-3 py-2 text-right">All actioned</th></tr>
+               <tr><th className="px-3 py-2">Startup</th><th className="px-3 py-2 text-right">Schedule rows<br /><span className="font-medium normal-case tracking-normal">pending · accepted · rejected</span></th><th className="px-3 py-2 text-right">Potential Biz Meet ratings<br /><span className="font-medium normal-case tracking-normal">unrated · ★ · ★★ · ★★★</span></th><th className="px-3 py-2 text-right">Schedule pending</th><th className="px-3 py-2 text-right">Schedule actioned</th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {[...startupRows].sort((left, right) => right.pending - left.pending).map((row) => (
                 <tr key={row.organisation.id}>
                   <td className="px-3 py-2.5 font-semibold">{row.organisation.name}</td>
                   <DecisionCell breakdown={row.schedule} />
-                  <DecisionCell breakdown={row.potential} />
+                   <RatingCell breakdown={row.potential} />
                   <td className="px-3 py-2.5 text-right font-bold text-amber-700">{row.pending}</td>
                   <td className="px-3 py-2.5 text-right font-semibold text-emerald-700">{row.confirmed + row.rejected}</td>
                 </tr>
@@ -4996,7 +5445,7 @@ function AdminDecisionsDashboard({
           </table>
         </div>
       </section>
-      <AdminEngagementPanel events={engagementEvents} identities={engagementIdentities} invites={engagementInvites} organisationNames={organisationNames} />
+      <AdminEngagementPanel events={engagementEvents} baselineAt={engagementBaselineAt} identities={engagementIdentities} invites={engagementInvites} organisationNames={organisationNames} onReset={onResetEngagement} />
     </div>
   );
 }
@@ -5005,10 +5454,15 @@ function DecisionCell({ breakdown }: { breakdown: { pending: number; accepted: n
   return <td className="px-3 py-2.5 text-right"><span className="font-bold text-amber-700">{breakdown.pending}</span><span className="mx-1 text-slate-300">·</span><span className="font-semibold text-emerald-700">{breakdown.accepted}</span><span className="mx-1 text-slate-300">·</span><span className="text-slate-600">{breakdown.rejected}</span></td>;
 }
 
+function RatingCell({ breakdown }: { breakdown: { unrated: number; one: number; two: number; three: number } }) {
+  return <td className="px-3 py-2.5 text-right text-xs"><span className="font-bold text-slate-500">{breakdown.unrated}</span><span className="mx-1 text-slate-300">·</span><span className="font-semibold text-amber-600">{breakdown.one} ★</span><span className="mx-1 text-slate-300">·</span><span className="font-semibold text-amber-600">{breakdown.two} ★★</span><span className="mx-1 text-slate-300">·</span><span className="font-semibold text-amber-600">{breakdown.three} ★★★</span></td>;
+}
+
 function DecisionsPage({
   items,
   potentialMeetings,
   engagementEvents,
+  engagementBaselineAt,
   engagementIdentities,
   engagementInvites,
   organisationNames,
@@ -5016,10 +5470,12 @@ function DecisionsPage({
   language,
   onOpenSchedule,
   onOpenBusinessMeetings,
+  onResetEngagement,
 }: {
   items: ScheduleItem[];
   potentialMeetings: PotentialMeeting[];
   engagementEvents: EngagementAccessEvent[];
+  engagementBaselineAt?: string;
   engagementIdentities: EngagementIdentity[];
   engagementInvites: EngagementInvite[];
   organisationNames: Record<string, string>;
@@ -5027,6 +5483,7 @@ function DecisionsPage({
   language: Language;
   onOpenSchedule: () => void;
   onOpenBusinessMeetings: () => void;
+  onResetEngagement: () => void;
 }) {
   if ((profile.role as string) === "lvnc_admin")
     return (
@@ -5034,10 +5491,12 @@ function DecisionsPage({
         items={items}
         potentialMeetings={potentialMeetings}
         engagementEvents={engagementEvents}
+        engagementBaselineAt={engagementBaselineAt}
         engagementIdentities={engagementIdentities}
         engagementInvites={engagementInvites}
         organisationNames={organisationNames}
         onOpenSchedule={onOpenSchedule}
+        onResetEngagement={onResetEngagement}
       />
     );
   const responseFor = (item: ScheduleItem) =>
@@ -5208,6 +5667,7 @@ function ItemDrawer({
   const response = item.responses.find(
     (r) => r.organisationId === profile.organisationId,
   );
+  const notAttending = !isAdmin && isNotAttending(item, profile.organisationId);
   const [attendancePlan, setAttendancePlan] = useState<AttendancePlan>(response?.attendancePlan ?? "not_set");
   const [customDate, setCustomDate] = useState(item.startsAt?.slice(0, 10) ?? "");
   const [customStart, setCustomStart] = useState(response?.attendanceStartsAt ? format(new Date(response.attendanceStartsAt), "HH:mm") : "09:00");
@@ -5249,7 +5709,7 @@ function ItemDrawer({
         onClick={onClose}
         aria-label="Close details"
       />
-      <aside className="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto border-l border-slate-200 bg-white shadow-2xl sm:w-[460px]">
+      <aside className={cn("fixed inset-y-0 right-0 z-50 w-full overflow-y-auto border-l border-slate-200 bg-white shadow-2xl sm:w-[460px]", notAttending && "event-not-attending")}>
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white/95 px-5 py-4 backdrop-blur">
           <div className="flex items-center gap-2">
             <span
@@ -5292,6 +5752,11 @@ function ItemDrawer({
           <h2 className="mt-4 text-2xl font-semibold leading-tight tracking-[-.02em]">
             {item.title}
           </h2>
+          {notAttending && (
+            <div className="mt-4 rounded-xl border border-slate-300 bg-slate-100 p-4 text-sm font-semibold leading-5 text-slate-700">
+              Startup not in UK during this programme window. This researched event remains visible for context.
+            </div>
+          )}
           <p className="mt-3 text-sm leading-6 text-slate-600">
             {item.description}
           </p>
@@ -5412,7 +5877,7 @@ function ItemDrawer({
               </div>
             </div>
           )}
-          {!isAdmin && (
+          {!isAdmin && !notAttending && (
             <section className={cn("mt-7 border-t border-slate-100 pt-6", (!response || response.decision === "undecided") && "urgent-attention rounded-2xl border border-amber-300 bg-amber-50 p-5 ring-2 ring-amber-200") }>
               <h3 className="font-semibold">Your decision</h3>
               <p className="mt-1 text-xs text-slate-500">
@@ -5695,7 +6160,9 @@ function CreateDialog({
   item,
   isAdmin,
   profile,
+  organisations,
   defaultItemType,
+  initialOrganisationIds,
   initialStartsAt,
   initialEndsAt,
   onCreate,
@@ -5705,16 +6172,24 @@ function CreateDialog({
   item?: ScheduleItem;
   isAdmin: boolean;
   profile: Profile;
+  organisations: Organisation[];
   defaultItemType?: ItemType;
+  initialOrganisationIds?: string[];
   initialStartsAt?: string;
   initialEndsAt?: string;
-  onCreate: (item: ScheduleItem) => void;
+  onCreate: (item: ScheduleItem) => boolean | void | Promise<boolean | void>;
 }) {
   const [audienceMode, setAudienceMode] = useState<"cohort" | "selected">(
     item?.visibilityScope === "selected_organisations" ? "selected" : "cohort",
   );
   const [targetIds, setTargetIds] = useState<string[]>(
-    item?.organisationIds ?? [],
+    item?.organisationIds ?? initialOrganisationIds ?? [],
+  );
+  const [participationByOrganisation, setParticipationByOrganisation] = useState<Record<string, "expected" | "not_attending">>(
+    item?.participationByOrganisation ?? {},
+  );
+  const [participationDetailsByOrganisation, setParticipationDetailsByOrganisation] = useState<NonNullable<ScheduleItem["participationDetailsByOrganisation"]>>(
+    item?.participationDetailsByOrganisation ?? {},
   );
   const [itemType, setItemType] = useState<ItemType>(
     item?.itemType ?? defaultItemType ?? (isAdmin ? "lvnc_core" : "third_party"),
@@ -5727,7 +6202,14 @@ function CreateDialog({
   const datePart = (value: string) => value ? format(new Date(value), "yyyy-MM-dd") : "";
   const timePart = (value: string) => value ? format(new Date(value), "HH:mm") : "";
   const updateDateTime = (date: string, time: string) => date ? `${date}T${time || "09:00"}` : "";
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const attendanceOrganisationIds = isAdmin
+    ? itemType === "lvnc_core"
+      ? targetIds.length > 0
+        ? targetIds
+        : organisations.map((organisation) => organisation.id)
+      : targetIds
+    : [];
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!startValue || !endValue) return;
     if (isAdmin && itemType !== "lvnc_core" && targetIds.length === 0) return;
@@ -5746,7 +6228,12 @@ function CreateDialog({
       : validEndDate;
     const isProgramme = itemType === "lvnc_core";
     const isThirdParty = itemType === "third_party";
-    onCreate({
+    // Older imported programme rows can be targeted to one startup. Keep that
+    // audience during an edit; changing dates or notes must not silently turn
+    // such a row into a cohort-wide event.
+    const preserveTargetedProgrammeAudience =
+      isProgramme && item?.visibilityScope === "selected_organisations";
+    const saved = await onCreate({
       id: item?.id ?? crypto.randomUUID(),
       createdBy: item?.createdBy ?? profile.id,
       createdOrganisationId:
@@ -5756,6 +6243,8 @@ function CreateDialog({
       itemType,
       visibilityScope: !isAdmin
         ? "selected_organisations"
+        : preserveTargetedProgrammeAudience
+          ? "selected_organisations"
         : isProgramme
           ? "cohort"
           : "selected_organisations",
@@ -5763,9 +6252,13 @@ function CreateDialog({
         ? profile.organisationId
           ? [profile.organisationId]
           : []
+        : preserveTargetedProgrammeAudience
+          ? targetIds
         : isProgramme
           ? []
           : targetIds,
+      participationByOrganisation,
+      participationDetailsByOrganisation,
       attendanceRule: isProgramme
         ? "compulsory"
         : (String(
@@ -5786,12 +6279,8 @@ function CreateDialog({
       reviewBy: isThirdParty
         ? String(data.get("reviewBy")) || undefined
         : undefined,
-      costType: isProgramme
-        ? "not_applicable"
-        : (String(data.get("costType")) as ScheduleItem["costType"]),
-      costNote: isThirdParty
-        ? String(data.get("costNote")) || undefined
-        : undefined,
+      costType: (String(data.get("costType")) || "not_applicable") as ScheduleItem["costType"],
+      costNote: String(data.get("costNote")) || undefined,
       status: item?.status ?? "proposed",
       bookingStatus: String(
         data.get("bookingStatus"),
@@ -5820,7 +6309,7 @@ function CreateDialog({
       conflictGroupId: item?.conflictGroupId,
       responses: item?.responses ?? [],
     });
-    setOpen(false);
+    if (saved !== false) setOpen(false);
   };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -5896,7 +6385,7 @@ function CreateDialog({
             {isAdmin && itemType !== "lvnc_core" && (
               <div className="sm:col-span-2">
                 <FieldLabel>Audience · bespoke event</FieldLabel>
-                <p className="mb-2 text-xs leading-5 text-slate-500">Only Core programme items can be cohort-wide. This item will stay out of the Master Template.</p>
+                <p className="mb-2 text-xs leading-5 text-slate-500">Choose every startup this event is relevant to (for example, the three health-sector companies). Only Core programme items can be cohort-wide; this bespoke event stays out of the Master Template.</p>
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -5912,7 +6401,9 @@ function CreateDialog({
                   </button>
                 </div>
                 {audienceMode === "selected" && (
-                  <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-slate-200 p-2 sm:grid-cols-3">
+                  <div className="mt-2 rounded-lg border border-slate-200 p-2">
+                    <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-indigo-700">{targetIds.length} startup{targetIds.length === 1 ? "" : "s"} selected</p>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {organisations.map((org) => (
                       <label
                         key={org.id}
@@ -5932,11 +6423,27 @@ function CreateDialog({
                         {org.name}
                       </label>
                     ))}
+                    </div>
                   </div>
                 )}
                 {targetIds.length === 0 && (
                   <p className="mt-2 text-xs font-semibold text-rose-600">Choose at least one startup.</p>
                 )}
+              </div>
+            )}
+            {isAdmin && attendanceOrganisationIds.length > 0 && (
+              <div className="sm:col-span-2 rounded-xl border border-rose-200 bg-rose-50/60 p-3">
+                <FieldLabel>Startup attendance exceptions</FieldLabel>
+                <p className="mt-1 text-xs leading-5 text-rose-900">Keep the researched event on the schedule. Mark a startup unavailable when it is outside its UK programme window; it will see “Startup not in UK”, not a cancelled event.</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {attendanceOrganisationIds.map((organisationId) => {
+                    const organisation = organisations.find((entry) => entry.id === organisationId);
+                    const notAttending = participationByOrganisation[organisationId] === "not_attending";
+                    const details = participationDetailsByOrganisation[organisationId] ?? {};
+                    const updateDetails = (change: Partial<typeof details>) => setParticipationDetailsByOrganisation((current) => ({ ...current, [organisationId]: { ...current[organisationId], ...change } }));
+                    return <div key={organisationId} className="rounded-lg border border-rose-100 bg-white p-2 text-xs font-semibold text-slate-700"><label className="flex items-center gap-2"><input type="checkbox" checked={notAttending} onChange={(event) => setParticipationByOrganisation((current) => ({ ...current, [organisationId]: event.target.checked ? "not_attending" : "expected" }))} />{organisation?.name ?? "Startup"}<span className="ml-auto text-[10px] font-bold uppercase tracking-wide text-rose-700">{notAttending ? "Startup not in UK" : "Expected"}</span></label><div className="mt-2 grid gap-2 sm:grid-cols-2"><Input aria-label={`${organisation?.name ?? "Startup"} attendees`} value={details.attendees ?? ""} onChange={(event) => updateDetails({ attendees: event.target.value })} placeholder="Who is coming (admin only)" /><Input aria-label={`${organisation?.name ?? "Startup"} UK arrival`} type="date" value={details.attendanceStartsOn ?? ""} onChange={(event) => updateDetails({ attendanceStartsOn: event.target.value })} /><Input aria-label={`${organisation?.name ?? "Startup"} UK departure`} type="date" value={details.attendanceEndsOn ?? ""} onChange={(event) => updateDetails({ attendanceEndsOn: event.target.value })} /><Input aria-label={`${organisation?.name ?? "Startup"} admin attendance note`} value={details.adminNote ?? ""} onChange={(event) => updateDetails({ adminNote: event.target.value })} placeholder="Private admin note" /></div></div>;
+                  })}
+                </div>
               </div>
             )}
             <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
@@ -6028,16 +6535,17 @@ function CreateDialog({
               Optional details
             </summary>
             <div className="mt-4 space-y-4">
-              {itemType === "third_party" && (
-                <div className="grid gap-4 rounded-xl border border-amber-200 bg-amber-50/50 p-4 sm:grid-cols-2">
+              <div className="grid gap-4 rounded-xl border border-amber-200 bg-amber-50/50 p-4 sm:grid-cols-2">
                   <div>
-                    <FieldLabel>Cost</FieldLabel>
+                    <FieldLabel>Attendee cost</FieldLabel>
                     <Select
                       name="costType"
-                      defaultValue={item?.costType === "paid" ? "paid" : "free"}
+                      defaultValue={item?.costType ?? (itemType === "lvnc_core" ? "not_applicable" : "unknown")}
                     >
+                      <option value="not_applicable">No attendee cost</option>
                       <option value="free">Free</option>
                       <option value="paid">Paid</option>
+                      <option value="unknown">To confirm</option>
                     </Select>
                   </div>
                   <div>
@@ -6073,16 +6581,16 @@ function CreateDialog({
                     <p className="mt-1 text-xs text-slate-500">Prompts LVCN to re-check an external event before the programme.</p>
                   </div>
                   <div>
-                    <FieldLabel>Event link (optional)</FieldLabel>
+                    <FieldLabel>Official event page (optional)</FieldLabel>
                     <Input
                       name="eventUrl"
                       type="url"
                       defaultValue={item?.eventUrl}
                       placeholder="https://"
                     />
+                    <p className="mt-1 text-xs text-slate-500">This is the link shown as “Open official event page” in the event details.</p>
                   </div>
-                </div>
-              )}
+              </div>
               <div>
                 <FieldLabel>Next action (optional)</FieldLabel>
                 <Input
@@ -6118,14 +6626,17 @@ function CreateDialog({
 function BusyDialog({
   open,
   setOpen,
+  language,
   organisationId,
   onCreate,
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
+  language: Language;
   organisationId: string;
   onCreate: (block: AvailabilityBlock) => void;
 }) {
+  const korean = language === "ko";
   const [allDay, setAllDay] = useState(true);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -6155,60 +6666,60 @@ function BusyDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent>
-        <DialogTitle>Add company work</DialogTitle>
+        <DialogTitle>{korean ? "\uD68C\uC0AC \uC2DC\uAC04 \uCC28\uB2E8" : "Block company time"}</DialogTitle>
         <DialogDescription>
-          Tell LVCN when not to schedule your company. Choose all-day for a
-          trip or multi-day absence, or specific hours for a lunch, call, or
-          other part-day commitment. Other startups cannot see this.
+          {korean
+            ? "LVCN\uC5D0 \uD68C\uC0AC \uC77C\uC815\uC744 \uC7A1\uC9C0 \uB9D0\uC544\uC57C \uD560 \uC2DC\uAC04\uC744 \uC54C\uB824 \uC8FC\uC138\uC694. \uCD9C\uC7A5\uC774\uB098 \uC5EC\uB7EC \uB0A0\uC758 \uBD80\uC7AC\uB294 \uC804\uC77C\uC744, \uC810\uC2EC\uC774\uB098 \uC804\uD654 \uB4F1\uC758 \uC77C\uBD80 \uC77C\uC815\uC740 \uD2B9\uC815 \uC2DC\uAC04\uC744 \uC120\uD0DD\uD558\uC138\uC694. \uB2E4\uB978 \uC2A4\uD0C0\uD2B8\uC5C5\uC5D0\uC11C\uB294 \uBCFC \uC218 \uC5C6\uC2B5\uB2C8\uB2E4."
+            : "Tell LVCN when not to schedule your company. Choose all-day for a trip or multi-day absence, or specific hours for a lunch, call, or other part-day commitment. Other startups cannot see this."}
         </DialogDescription>
         <form onSubmit={submit} className="mt-6 space-y-4">
           <div>
-            <FieldLabel>What is blocked?</FieldLabel>
-            <Input name="title" required placeholder="e.g. Travel to the UK" />
+            <FieldLabel>{korean ? "\uCC28\uB2E8\uD560 \uC77C\uC815" : "What is blocked?"}</FieldLabel>
+            <Input name="title" required placeholder={korean ? "\uC608: \uC601\uAD6D \uCD9C\uC7A5" : "e.g. Travel to the UK"} />
           </div>
           <div>
-            <FieldLabel>What time should LVCN keep free?</FieldLabel>
+            <FieldLabel>{korean ? "LVCN\uC774 \uBE44\uC6CC \uB450\uC5B4\uC57C \uD560 \uC2DC\uAC04" : "What time should LVCN keep free?"}</FieldLabel>
             <div className="mt-1 grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setAllDay(true)} className={cn("rounded-xl border p-3 text-left text-sm font-semibold", allDay ? "border-indigo-500 bg-indigo-50 text-indigo-900" : "border-slate-200 text-slate-600 hover:bg-slate-50")}>All day or multiple days<span className="mt-1 block text-xs font-normal">Travel, leave, or a full-day commitment.</span></button>
-              <button type="button" onClick={() => setAllDay(false)} className={cn("rounded-xl border p-3 text-left text-sm font-semibold", !allDay ? "border-indigo-500 bg-indigo-50 text-indigo-900" : "border-slate-200 text-slate-600 hover:bg-slate-50")}>Specific hours<span className="mt-1 block text-xs font-normal">For example, 09:00–13:00 on 17 October.</span></button>
+              <button type="button" onClick={() => setAllDay(true)} className={cn("rounded-xl border p-3 text-left text-sm font-semibold", allDay ? "border-indigo-500 bg-indigo-50 text-indigo-900" : "border-slate-200 text-slate-600 hover:bg-slate-50")}>{korean ? "\uC804\uC77C \uB610\uB294 \uC5EC\uB7EC \uB0A0" : "All day or multiple days"}<span className="mt-1 block text-xs font-normal">{korean ? "\uCD9C\uC7A5, \uD734\uAC00 \uB610\uB294 \uC804\uC77C \uC77C\uC815" : "Travel, leave, or a full-day commitment."}</span></button>
+              <button type="button" onClick={() => setAllDay(false)} className={cn("rounded-xl border p-3 text-left text-sm font-semibold", !allDay ? "border-indigo-500 bg-indigo-50 text-indigo-900" : "border-slate-200 text-slate-600 hover:bg-slate-50")}>{korean ? "\uD2B9\uC815 \uC2DC\uAC04" : "Specific hours"}<span className="mt-1 block text-xs font-normal">{korean ? "\uC608: 10\uC6D4 17\uC77C 09:00~13:00" : "For example, 09:00–13:00 on 17 October."}</span></button>
             </div>
           </div>
           {allDay ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <FieldLabel>First unavailable date</FieldLabel>
-                <DatePickerField ariaLabel="First unavailable date" value={startDate} onChange={setStartDate} />
+                <FieldLabel>{korean ? "\uCCAB \uBC88\uC9F8 \uC77C\uC815 \uBD88\uAC00 \uB0A0\uC9DC" : "First unavailable date"}</FieldLabel>
+                <DatePickerField ariaLabel={korean ? "\uCCAB \uBC88\uC9F8 \uC77C\uC815 \uBD88\uAC00 \uB0A0\uC9DC" : "First unavailable date"} value={startDate} onChange={setStartDate} />
               </div>
               <div>
-                <FieldLabel>Last unavailable date</FieldLabel>
-                <DatePickerField ariaLabel="Last unavailable date" value={endDate} min={startDate} onChange={setEndDate} />
+                <FieldLabel>{korean ? "\uB9C8\uC9C0\uB9C9 \uC77C\uC815 \uBD88\uAC00 \uB0A0\uC9DC" : "Last unavailable date"}</FieldLabel>
+                <DatePickerField ariaLabel={korean ? "\uB9C8\uC9C0\uB9C9 \uC77C\uC815 \uBD88\uAC00 \uB0A0\uC9DC" : "Last unavailable date"} value={endDate} min={startDate} onChange={setEndDate} />
               </div>
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <FieldLabel>Starts</FieldLabel>
+                <FieldLabel>{korean ? "\uC2DC\uC791" : "Starts"}</FieldLabel>
                 <div className="grid gap-2">
-                  <DatePickerField ariaLabel="Company work start date" value={startDate} onChange={setStartDate} />
-                  <Select aria-label="Company work start time" value={startTime} onChange={(event) => setStartTime(event.target.value)}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</Select>
+                  <DatePickerField ariaLabel={korean ? "\uD68C\uC0AC \uC2DC\uAC04 \uCC28\uB2E8 \uC2DC\uC791 \uB0A0\uC9DC" : "Company work start date"} value={startDate} onChange={setStartDate} />
+                  <Select aria-label={korean ? "\uD68C\uC0AC \uC2DC\uAC04 \uCC28\uB2E8 \uC2DC\uC791 \uC2DC\uAC04" : "Company work start time"} value={startTime} onChange={(event) => setStartTime(event.target.value)}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</Select>
                 </div>
               </div>
               <div>
-                <FieldLabel>Ends</FieldLabel>
+                <FieldLabel>{korean ? "\uC885\uB8CC" : "Ends"}</FieldLabel>
                 <div className="grid gap-2">
-                  <DatePickerField ariaLabel="Company work end date" value={endDate} min={startDate} onChange={setEndDate} />
-                  <Select aria-label="Company work end time" value={endTime} onChange={(event) => setEndTime(event.target.value)}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</Select>
+                  <DatePickerField ariaLabel={korean ? "\uD68C\uC0AC \uC2DC\uAC04 \uCC28\uB2E8 \uC885\uB8CC \uB0A0\uC9DC" : "Company work end date"} value={endDate} min={startDate} onChange={setEndDate} />
+                  <Select aria-label={korean ? "\uD68C\uC0AC \uC2DC\uAC04 \uCC28\uB2E8 \uC885\uB8CC \uC2DC\uAC04" : "Company work end time"} value={endTime} onChange={(event) => setEndTime(event.target.value)}>{timeOptions.map((time) => <option key={time} value={time}>{time}</option>)}</Select>
                 </div>
               </div>
             </div>
           )}
           <div>
-            <FieldLabel>Optional note for LVCN</FieldLabel>
+            <FieldLabel>{korean ? "LVCN\uC744 \uC704\uD55C \uC120\uD0DD \uBA54\uBAA8" : "Optional note for LVCN"}</FieldLabel>
             <Input
               name="note"
-              placeholder="e.g. Flight cancelled; available from 8 October"
+              placeholder={korean ? "\uC608: \uD56D\uACF5\uD3B8 \uCDE8\uC18C, 10\uC6D4 8\uC77C\uBD80\uD130 \uAC00\uB2A5" : "e.g. Flight cancelled; available from 8 October"}
             />
-            <p className="mt-1 text-xs text-slate-500">If you add a note, it appears with the availability alert in the admin inbox.</p>
+            <p className="mt-1 text-xs text-slate-500">{korean ? "\uBA54\uBAA8\uB97C \uCD94\uAC00\uD558\uBA74 \uAD00\uB9AC\uC790 \uC218\uC2E0\uD568\uC5D0\uC11C \uC77C\uC815 \uAC00\uB2A5 \uC54C\uB9BC\uACFC \uD568\uAED8 \uD45C\uC2DC\uB429\uB2C8\uB2E4." : "If you add a note, it appears with the availability alert in the admin inbox."}</p>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button
@@ -6216,11 +6727,11 @@ function BusyDialog({
               variant="ghost"
               onClick={() => setOpen(false)}
             >
-              Cancel
+              {korean ? "\uCDE8\uC18C" : "Cancel"}
             </Button>
             <Button type="submit" variant="indigo" disabled={!startDate || !endDate || (!allDay && `${endDate}T${endTime}` <= `${startDate}T${startTime}`)}>
               <LockKeyhole className="size-4" />
-              Block time
+              {korean ? "\uC2DC\uAC04 \uCC28\uB2E8" : "Block time"}
             </Button>
           </div>
         </form>

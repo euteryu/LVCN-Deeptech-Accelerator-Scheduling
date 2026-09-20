@@ -13,7 +13,6 @@ export function OrganisersPage() {
     <div className="mx-auto max-w-6xl pb-8">
       <p className="text-xs font-bold uppercase tracking-[.15em] text-indigo-600">SVC programme</p>
       <h1 className="mt-1 text-3xl font-semibold tracking-tight">Investor Showcase</h1>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">Meet the organisations behind the programme and access the SVC Investor Showcase. Each link opens the relevant organisation or event in a new tab.</p>
       <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {links.map(([name, url, description], index) => (
           <a key={name} href={url} target="_blank" rel="noreferrer" className={cn("group flex min-h-52 flex-col rounded-2xl border p-5 shadow-[0_1px_2px_rgba(15,23,42,.03)] transition hover:-translate-y-0.5 hover:shadow-md", index === links.length - 1 ? "border-indigo-300 bg-gradient-to-br from-indigo-700 to-[#162c5b] text-white" : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50")}>

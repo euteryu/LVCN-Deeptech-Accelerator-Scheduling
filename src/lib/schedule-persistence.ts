@@ -39,3 +39,23 @@ export const meetingTargetValues = (item: ScheduleItem, organisationId: string) 
     coordination_note: target?.coordinationNote || null,
   };
 };
+
+export const scheduleParticipationValues = (item: ScheduleItem) =>
+  Object.entries(item.participationByOrganisation ?? {})
+    .map(([organisationId, status]) => ({
+      schedule_item_id: item.id,
+      organisation_id: organisationId,
+      status,
+    }));
+
+export const scheduleParticipationDetailValues = (item: ScheduleItem) =>
+  Object.entries(item.participationDetailsByOrganisation ?? {}).map(
+    ([organisationId, details]) => ({
+      schedule_item_id: item.id,
+      organisation_id: organisationId,
+      attendees: details.attendees || null,
+      attendance_starts_on: details.attendanceStartsOn || null,
+      attendance_ends_on: details.attendanceEndsOn || null,
+      admin_note: details.adminNote || null,
+    }),
+  );

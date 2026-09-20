@@ -113,6 +113,13 @@ export interface ScheduleItem {
   fit?: string;
   nextAction?: string;
   sourceNote?: string;
+  participationByOrganisation?: Record<string, "expected" | "not_attending">;
+  participationDetailsByOrganisation?: Record<string, {
+    attendees?: string;
+    attendanceStartsOn?: string;
+    attendanceEndsOn?: string;
+    adminNote?: string;
+  }>;
   conflictGroupId?: string;
   meetingCategory?: string;
   meetingStatus?: string;
@@ -168,7 +175,7 @@ export type ViewMode = "week" | "day" | "month";
 
 export interface EngagementAccessEvent {
   actorId: string;
-  organisationId: string;
+  organisationId?: string;
   occurredAt: string;
 }
 

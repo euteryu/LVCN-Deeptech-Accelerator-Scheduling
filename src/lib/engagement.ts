@@ -36,6 +36,7 @@ export function buildEngagementSummary(
   organisationNames: Record<string, string>,
   now = new Date(),
 ): EngagementCompany[] {
+  const internalOrganisationId = "lvnc_internal";
   const profileById = new Map(identities.map((identity) => [identity.id, identity]));
   const users = new Map<string, {
     email: string;
@@ -52,13 +53,13 @@ export function buildEngagementSummary(
   };
 
   invites
-    .filter((invite) => invite.role !== "lvnc_admin" && invite.organisationId)
-    .forEach((invite) => ensureUser(invite.email, invite.organisationId!, invite.fullName));
+    .filter((invite) => invite.organisationId || invite.role === "lvnc_admin")
+    .forEach((invite) => ensureUser(invite.email, invite.role === "lvnc_admin" ? internalOrganisationId : invite.organisationId!, invite.fullName));
 
   for (const event of events) {
     const identity = profileById.get(event.actorId);
-    if (!identity || identity.role === "lvnc_admin") continue;
-    const organisationId = event.organisationId || identity.organisationId;
+    if (!identity) continue;
+    const organisationId = identity.role === "lvnc_admin" ? internalOrganisationId : event.organisationId || identity.organisationId;
     if (!organisationId) continue;
     ensureUser(identity.email, organisationId, identity.fullName).events.push(event);
   }
@@ -105,7 +106,7 @@ export function buildEngagementSummary(
     };
     const company = companies.get(entry.organisationId) ?? {
       organisationId: entry.organisationId,
-      organisationName: organisationNames[entry.organisationId] ?? "Unknown organisation",
+      organisationName: organisationNames[entry.organisationId] ?? (entry.organisationId === internalOrganisationId ? "LVCN moderators" : "Unknown organisation"),
       users: [],
       accessCount: 0,
       activeUsers: 0,
@@ -129,5 +130,10 @@ export function buildEngagementSummary(
       ...company,
       users: company.users.sort((left, right) => (right.lastAccess ?? "").localeCompare(left.lastAccess ?? "")),
     }))
-    .sort((left, right) => (right.lastAccess ?? "").localeCompare(left.lastAccess ?? ""));
+    .sort((left, right) => {
+      const leftIsInternal = left.organisationId === internalOrganisationId;
+      const rightIsInternal = right.organisationId === internalOrganisationId;
+      if (leftIsInternal !== rightIsInternal) return leftIsInternal ? 1 : -1;
+      return (right.lastAccess ?? "").localeCompare(left.lastAccess ?? "");
+    });
 }
